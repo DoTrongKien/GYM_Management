@@ -11,7 +11,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -43,16 +42,16 @@ public class AdminController {
     @GetMapping("/users")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getAllUsers() {
         List<Map<String, Object>> users = userRepository.findAll().stream().map(u -> {
-            Map<String, Object> m = new HashMap<>();
-            m.put("id", u.getId());
-            m.put("fullName", u.getFullName() != null ? u.getFullName() : "");
-            m.put("email", u.getEmail());
-            m.put("phone", u.getPhone() != null ? u.getPhone() : "");
-            m.put("status", u.getStatus());
-            m.put("emailVerified", u.getEmailVerified());
-            m.put("role", u.getRole().getRoleName());
-            m.put("createdAt", u.getCreatedAt().toString());
-            return m;
+            Map<String, Object> map = new java.util.LinkedHashMap<>();
+            map.put("id", u.getId());
+            map.put("fullName", u.getFullName() != null ? u.getFullName() : "");
+            map.put("email", u.getEmail());
+            map.put("phone", u.getPhone() != null ? u.getPhone() : "");
+            map.put("status", u.getStatus());
+            map.put("emailVerified", u.getEmailVerified());
+            map.put("role", u.getRole().getRoleName());
+            map.put("createdAt", u.getCreatedAt() != null ? u.getCreatedAt().toString() : "");
+            return map;
         }).collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.success(users));
     }
@@ -60,7 +59,7 @@ public class AdminController {
     @GetMapping("/users/{id}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getUserById(@PathVariable Long id) {
         User u = userRepository.findById(id).orElseThrow(() -> new RuntimeException("User not found"));
-        Map<String, Object> data = new HashMap<>();
+        Map<String, Object> data = new java.util.LinkedHashMap<>();
         data.put("id", u.getId());
         data.put("fullName", u.getFullName() != null ? u.getFullName() : "");
         data.put("email", u.getEmail());
@@ -68,7 +67,7 @@ public class AdminController {
         data.put("status", u.getStatus());
         data.put("emailVerified", u.getEmailVerified());
         data.put("role", u.getRole().getRoleName());
-        data.put("createdAt", u.getCreatedAt().toString());
+        data.put("createdAt", u.getCreatedAt() != null ? u.getCreatedAt().toString() : "");
         return ResponseEntity.ok(ApiResponse.success(data));
     }
 
