@@ -53,11 +53,13 @@ public class ProgressService {
                 .build();
         progressRepository.save(pt);
 
+        // Tạo biến effectively final để dùng trong Lambda
+        double finalBmi = bmi;
+
         // Update profile weight/bmi
         profileRepository.findByUserId(user.getId()).ifPresent(p -> {
             if (request.getWeight() != null) p.setWeight(request.getWeight());
-//            if (bmi > 0) p.setBmi(bmi);
-            
+            if (finalBmi > 0) p.setBmi(finalBmi); // Đã hết lỗi đỏ
             profileRepository.save(p);
         });
 
