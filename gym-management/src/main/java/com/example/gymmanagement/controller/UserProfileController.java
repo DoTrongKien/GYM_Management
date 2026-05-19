@@ -1,10 +1,11 @@
 package com.example.gymmanagement.controller;
 
-import com.example.gymmanagement.dto.UserProfileRequest;
-import com.example.gymmanagement.entity.UserProfile;
+import com.example.gymmanagement.dto.request.UserProfileRequest;
+import com.example.gymmanagement.dto.response.ApiResponse;
+import com.example.gymmanagement.dto.response.UserProfileResponse;
 import com.example.gymmanagement.service.UserProfileService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
@@ -14,33 +15,25 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class UserProfileController {
 
-    private final UserProfileService userProfileService;
+    private final UserProfileService profileService;
 
-    /**
-     * ROLE_USER: tự cập nhật profile của mình
-     * userId lấy từ token — không cần truyền trên URL
-     * POST /api/profile
-     */
     @PostMapping
-    @PreAuthorize("hasAuthority('ROLE_USER')")
-    public UserProfile createOrUpdateMyProfile(
+    public ResponseEntity<ApiResponse<UserProfileResponse>> saveProfile(
             @AuthenticationPrincipal UserDetails userDetails,
-            @RequestBody UserProfileRequest request
-    ) {
-        String email = userDetails.getUsername(); // email từ token
-        return userProfileService.createOrUpdateProfile(email, request);
+            @RequestBody UserProfileRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                profileService.saveOrUpdate(userDetails.getUsername(), request),
+                "Profile updated successfully"));
     }
 
-    /**
-     * ROLE_ADMIN: cập nhật profile của bất kỳ user nào
-     * POST /api/profile/{userId}
-     */
-    @PostMapping("/{userId}")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
-    public UserProfile createOrUpdateProfileByAdmin(
-            @PathVariable Long userId,
-            @RequestBody UserProfileRequest request
-    ) {
-        return userProfileService.createOrUpdateProfile(userId, request);
+    @GetMapping
+    public ResponseEntity<ApiResponse<UserProfileResponse>> getMyProfile(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(ApiResponse.success(profileService.getMyProfile(userDetails.getUsername())));
+    }
+
+    @GetMapping("/{userId}")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> getProfileById(@PathVariable Long userId) {
+        return ResponseEntity.ok(ApiResponse.success(profileService.getProfileById(userId)));
     }
 }

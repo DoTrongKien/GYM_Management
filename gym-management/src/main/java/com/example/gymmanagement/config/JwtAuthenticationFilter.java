@@ -1,6 +1,5 @@
 package com.example.gymmanagement.config;
 
-
 import com.example.gymmanagement.security.JwtService;
 import com.example.gymmanagement.service.CustomUserDetailsService;
 import jakarta.servlet.FilterChain;
@@ -25,57 +24,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final CustomUserDetailsService userDetailsService;
 
     @Override
-    protected void doFilterInternal(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            FilterChain filterChain
-    ) throws ServletException, IOException {
-
-
-        String path = request.getServletPath();
-
-        if (path.startsWith("/api/auth")) {
-
-            filterChain.doFilter(request, response);
-
-            return;
-        }
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
         String authHeader = request.getHeader("Authorization");
-
-        System.out.println(request.getRequestURI());
-        if (authHeader == null ||
-                !authHeader.startsWith("Bearer ")) {
-
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
-
             return;
         }
-
         String token = authHeader.substring(7);
-
-        String email = jwtService.extractEmail(token);
-
-        UserDetails userDetails =
-                userDetailsService.loadUserByUsername(email);
-
-        UsernamePasswordAuthenticationToken authToken =
-                new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null,
-                        userDetails.getAuthorities()
-                );
-
-        authToken.setDetails(
-                new WebAuthenticationDetailsSource()
-                        .buildDetails(request)
-        );
-
-        SecurityContextHolder.getContext()
-                .setAuthentication(authToken);
-
-
-        System.out.println("EMAIL FROM TOKEN: " + email);
-
+        if (jwtService.isTokenValid(token)) {
+            String email = jwtService.extractEmail(token);
+            UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+            UsernamePasswordAuthenticationToken auth =
+                    new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+            auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            SecurityContextHolder.getContext().setAuthentication(auth);
+        }
         filterChain.doFilter(request, response);
     }
 }

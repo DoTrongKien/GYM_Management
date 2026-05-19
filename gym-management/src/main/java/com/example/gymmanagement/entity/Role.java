@@ -1,6 +1,5 @@
 package com.example.gymmanagement.entity;
 
-
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -10,8 +9,8 @@ import lombok.*;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class Role {
 
+public class Role {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

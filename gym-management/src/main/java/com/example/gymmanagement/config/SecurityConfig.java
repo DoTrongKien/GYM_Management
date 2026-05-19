@@ -10,10 +10,15 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 @Configuration
 @RequiredArgsConstructor
-@EnableMethodSecurity // bật @PreAuthorize cho từng method nếu cần sau này
+@EnableMethodSecurity
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -24,35 +29,46 @@ public class SecurityConfig {
     }
 
     @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOriginPatterns(List.of("*"));
+        config.setAllowedMethods(List.of("GET","POST","PUT","DELETE","PATCH","OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setAllowCredentials(true);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+
+    @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-
         http
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
-
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                )
-
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-
-                        // Public: ai cũng gọi được
                         .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/api/exercises").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/ratings/public").permitAll()
 
-                        // ROLE_USER: chỉ tự cập nhật/xem profile của mình (không cần userId trên URL)
-                        .requestMatchers(HttpMethod.POST, "/api/profile").hasAuthority("ROLE_USER")
-                        .requestMatchers(HttpMethod.GET,  "/api/profile").hasAuthority("ROLE_USER")
+                        // Admin only
+                        .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
 
-                        // ROLE_ADMIN: xem profile của bất kỳ user nào theo id
-                        .requestMatchers("/api/profile/**").hasAuthority("ROLE_ADMIN")
+                        // User routes
+                        .requestMatchers("/api/profile/**").authenticated()
+                        .requestMatchers("/api/workout-plans/**").authenticated()
+                        .requestMatchers("/api/sessions/**").authenticated()
+                        .requestMatchers("/api/progress/**").authenticated()
+                        .requestMatchers("/api/memberships/**").authenticated()
+                        .requestMatchers("/api/nutrition/**").authenticated()
+                        .requestMatchers("/api/ratings/**").authenticated()
+                        .requestMatchers("/api/notifications/**").authenticated()
+                        .requestMatchers("/api/dashboard/**").authenticated()
+                        .requestMatchers("/api/exercises/**").authenticated()
 
-                        // Mọi endpoint còn lại yêu cầu đăng nhập
                         .anyRequest().authenticated()
                 )
-
-                .addFilterBefore(
-                        jwtAuthenticationFilter,
-                        UsernamePasswordAuthenticationFilter.class
-                );
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

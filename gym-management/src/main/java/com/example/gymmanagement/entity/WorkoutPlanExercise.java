@@ -5,27 +5,24 @@ import lombok.*;
 
 @Entity
 @Table(name = "workout_plan_exercises")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class WorkoutPlanExercise {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
-    @JoinColumn(name = "workout_plan_id")
-    private WorkoutPlan workoutPlan;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "plan_day_id")
+    private WorkoutPlanDay planDay;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "exercise_id")
     private Exercise exercise;
 
     private Integer sets;
-
     private Integer reps;
-
-    private String dayOfWeek;
+    private Integer durationSeconds;
+    private Integer restSeconds;
+    private Integer orderIndex;
+    private String notes;
 }
