@@ -56,7 +56,8 @@ public class ProgressService {
         // Update profile weight/bmi
         profileRepository.findByUserId(user.getId()).ifPresent(p -> {
             if (request.getWeight() != null) p.setWeight(request.getWeight());
-            if (bmi > 0) p.setBmi(bmi);
+//            if (bmi > 0) p.setBmi(bmi);
+            
             profileRepository.save(p);
         });
 
