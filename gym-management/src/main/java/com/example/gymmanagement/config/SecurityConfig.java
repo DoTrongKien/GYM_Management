@@ -47,13 +47,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(
-                                "/api/auth/**",
-                                "/swagger-ui/**",
-                                "/v3/api-docs/**",
-                                "/swagger-ui.html"
-                        ).permitAll()
-
+                        .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/exercises").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/ratings/public").permitAll()
 
@@ -67,6 +61,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/progress/**").authenticated()
                         .requestMatchers("/api/memberships/**").authenticated()
                         .requestMatchers("/api/nutrition/**").authenticated()
+                        .requestMatchers("/api/ratings/admin/**").hasAuthority("ROLE_ADMIN")
                         .requestMatchers("/api/ratings/**").authenticated()
                         .requestMatchers("/api/notifications/**").authenticated()
                         .requestMatchers("/api/dashboard/**").authenticated()

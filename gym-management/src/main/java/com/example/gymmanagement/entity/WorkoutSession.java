@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 @Entity
@@ -28,16 +29,22 @@ public class WorkoutSession {
     private WorkoutPlanDay planDay;
 
     private LocalDate sessionDate;
+    private LocalTime scheduledTime;   // giờ tập đã đặt lịch
     private LocalDateTime checkInTime;
     private LocalDateTime checkOutTime;
 
     @Enumerated(EnumType.STRING)
+    @Builder.Default
     private SessionStatus status = SessionStatus.SCHEDULED;
 
     private Integer totalCaloriesBurned;
     private Integer durationMinutes;
     private String notes;
-    private Integer weekNumber; // which week of the plan
+    private Integer weekNumber;
+
+    // custom session (không thuộc plan)
+    private String customSessionName;
+    private Boolean isCustom = false;
 
     @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<SessionExerciseLog> exerciseLogs;

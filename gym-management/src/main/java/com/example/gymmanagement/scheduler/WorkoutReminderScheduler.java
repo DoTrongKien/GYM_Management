@@ -12,6 +12,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 
 @Component
@@ -24,59 +25,65 @@ public class WorkoutReminderScheduler {
     private final EmailService emailService;
     private final NotificationService notificationService;
 
-    // Run every day at 7:00 AM — remind users of today's scheduled sessions
+    // 7:00 AM — remind today's scheduled sessions (no scheduled time)
     @Scheduled(cron = "0 0 7 * * *")
     public void sendDailyWorkoutReminders() {
-        log.info("Running daily workout reminder job...");
-        List<WorkoutSession> todaySessions = sessionRepository.findScheduledSessionsForDate(LocalDate.now());
-        for (WorkoutSession session : todaySessions) {
+        List<WorkoutSession> sessions = sessionRepository.findScheduledSessionsForDate(LocalDate.now());
+        for (WorkoutSession s : sessions) {
+            if (s.getScheduledTime() != null) continue; // handled by 30-min reminder
             try {
-                String planName = session.getWorkoutPlan() != null ? session.getWorkoutPlan().getPlanName() : "your workout";
-                String dayName  = session.getPlanDay()    != null ? session.getPlanDay().getDayName()    : "";
-
-                emailService.sendWorkoutReminder(
-                        session.getUser().getEmail(),
-                        session.getUser().getFullName(),
-                        session.getSessionDate().toString(),
-                        planName + " – " + dayName
-                );
-
-                notificationService.sendToUser(
-                        session.getUser().getId(),
-                        "💪 Workout Reminder",
-                        "You have a " + planName + " session scheduled today (" + dayName + "). Let's go!",
-                        "WORKOUT_REMINDER"
-                );
+                String plan = s.getWorkoutPlan() != null ? s.getWorkoutPlan().getPlanName()
+                        : s.getCustomSessionName() != null ? s.getCustomSessionName() : "Buổi tập";
+                emailService.sendWorkoutReminder(s.getUser().getEmail(), s.getUser().getFullName(),
+                        s.getSessionDate().toString(), plan);
+                notificationService.sendToUser(s.getUser().getId(),
+                        "💪 Nhắc nhở tập luyện hôm nay",
+                        "Bạn có buổi tập " + plan + " vào hôm nay. Hãy cố gắng lên!",
+                        "WORKOUT_REMINDER");
             } catch (Exception e) {
-                log.error("Failed to send reminder for session {}: {}", session.getId(), e.getMessage());
+                log.error("Reminder error session {}: {}", s.getId(), e.getMessage());
             }
         }
-        log.info("Sent {} workout reminders.", todaySessions.size());
+        log.info("Sent {} daily reminders", sessions.size());
     }
 
-    // Run every day at 9:00 AM — warn users whose membership expires in 3 days
+    // Every 15 min — remind sessions starting in ~30 min
+    @Scheduled(fixedRate = 900_000)
+    public void sendUpcomingSessionReminders() {
+        LocalDate today = LocalDate.now();
+        LocalTime from  = LocalTime.now().plusMinutes(25);
+        LocalTime to    = LocalTime.now().plusMinutes(35);
+        List<WorkoutSession> sessions = sessionRepository.findAllUpcomingSessions(today, from, to);
+        for (WorkoutSession s : sessions) {
+            try {
+                String plan = s.getCustomSessionName() != null ? s.getCustomSessionName()
+                        : s.getWorkoutPlan() != null ? s.getWorkoutPlan().getPlanName() : "Buổi tập";
+                notificationService.sendToUser(s.getUser().getId(),
+                        "⏰ Còn 30 phút nữa đến giờ tập!",
+                        "Buổi tập \"" + plan + "\" bắt đầu lúc " + s.getScheduledTime() + ". Chuẩn bị thôi!",
+                        "WORKOUT_REMINDER");
+            } catch (Exception e) {
+                log.error("Upcoming reminder error: {}", e.getMessage());
+            }
+        }
+    }
+
+    // 9:00 AM — membership expiry
     @Scheduled(cron = "0 0 9 * * *")
     public void sendMembershipExpiryReminders() {
-        log.info("Running membership expiry reminder job...");
         LocalDate expiryDate = LocalDate.now().plusDays(3);
         List<Membership> expiring = membershipRepository.findExpiringOnDate(expiryDate);
         for (Membership m : expiring) {
             try {
-                emailService.sendMembershipExpiryReminder(
-                        m.getUser().getEmail(),
-                        m.getUser().getFullName(),
-                        m.getEndDate().toString()
-                );
-                notificationService.sendToUser(
-                        m.getUser().getId(),
-                        "⚠️ Membership Expiring Soon",
-                        "Your " + m.getMembershipType().name() + " membership expires on " + m.getEndDate() + ". Renew now to keep your progress going!",
-                        "SYSTEM"
-                );
+                emailService.sendMembershipExpiryReminder(m.getUser().getEmail(),
+                        m.getUser().getFullName(), m.getEndDate().toString());
+                notificationService.sendToUser(m.getUser().getId(),
+                        "⚠️ Gói tập sắp hết hạn",
+                        "Gói " + m.getMembershipType() + " của bạn hết hạn vào " + m.getEndDate() + ". Gia hạn ngay!",
+                        "SYSTEM");
             } catch (Exception e) {
-                log.error("Failed to send expiry reminder for membership {}: {}", m.getId(), e.getMessage());
+                log.error("Expiry reminder error: {}", e.getMessage());
             }
         }
-        log.info("Sent {} membership expiry reminders.", expiring.size());
     }
 }

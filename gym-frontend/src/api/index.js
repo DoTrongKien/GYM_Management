@@ -19,20 +19,12 @@ api.interceptors.response.use(
     res => res.data,
     err => {
       const msg = err.response?.data?.message || 'Lỗi kết nối server'
-
-      if (
-          err.response?.status === 401 ||
-          err.response?.status === 403
-      ) {
+      if (err.response?.status === 401) {
         localStorage.clear()
         window.location.href = '/login'
-        return Promise.reject(err)
-      }
-
-      if (err.response?.status !== 404) {
+      } else if (err.response?.status !== 404) {
         ElMessage.error(msg)
       }
-
       return Promise.reject(err)
     }
 )
@@ -66,9 +58,11 @@ export const sessionAPI = {
   getAll:       ()           => api.get('/sessions'),
   getWeek:      ()           => api.get('/sessions/this-week'),
   getById:      (id)         => api.get(`/sessions/${id}`),
-  checkIn:      (id)         => api.post(`/sessions/${id}/check-in`),
+  checkIn:    (id)         => api.post(`/sessions/${id}/check-in`),
+  schedule:   (data)       => api.post('/sessions/schedule', data),
   complete:     (id, data)   => api.post(`/sessions/${id}/complete`, data),
-  skip:         (id, notes)  => api.post(`/sessions/${id}/skip`, { notes })
+  skip:         (id, notes)  => api.post(`/sessions/${id}/skip`, { notes }),
+  delete:       (id)         => api.delete(`/sessions/${id}`)
 }
 
 // ── Progress ──────────────────────────────────
@@ -105,10 +99,13 @@ export const exerciseAPI = {
 
 // ── Ratings ───────────────────────────────────
 export const ratingAPI = {
-  add:          (data) => api.post('/ratings', data),
-  getPublic:    ()     => api.get('/ratings/public'),
-  getMy:        ()     => api.get('/ratings/my'),
-  getAverages:  ()     => api.get('/ratings/averages')
+  add:          (data)         => api.post('/ratings', data),
+  getPublic:    ()             => api.get('/ratings/public'),
+  getMy:        ()             => api.get('/ratings/my'),
+  getAverages:  ()             => api.get('/ratings/averages'),
+  // Admin
+  getAll:       ()             => api.get('/ratings/admin/all'),
+  adminReply:   (id, reply)    => api.post(`/ratings/admin/${id}/reply`, { reply })
 }
 
 // ── Notifications ─────────────────────────────
