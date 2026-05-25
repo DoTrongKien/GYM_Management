@@ -41,7 +41,7 @@
       <el-table-column label="Giá (đ)" width="130" align="right">
         <template #default="{row}">{{ Number(row.price).toLocaleString() }}</template>
       </el-table-column>
-      <el-table-column label="Thanh toán" width="120" align="center">
+      <el-table-column label="Hình thức" width="120" align="center">
         <template #default="{row}">{{ row.paymentMethod || '--' }}</template>
       </el-table-column>
       <el-table-column label="Trạng thái" width="120" align="center">
@@ -49,7 +49,7 @@
           <span class="badge" :class="payBadge(row.paymentStatus)">{{ row.paymentStatus }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="Thao tác" width="160" align="center" fixed="right">
+      <el-table-column label="Trạng thái" width="160" align="center" fixed="right">
         <template #default="{row}">
           <el-button
             v-if="row.paymentStatus === 'PENDING'"

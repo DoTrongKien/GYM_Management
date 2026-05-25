@@ -49,16 +49,27 @@ const router = createRouter({
 })
 
 router.beforeEach((to, _from, next) => {
-  const auth = useAuthStore()
+    const auth = useAuthStore()
 
-  if (to.meta.requiresAuth && !auth.isLoggedIn) return next('/login')
-  if (to.meta.guest && auth.isLoggedIn) {
-    return next(auth.isAdmin ? '/admin' : '/app')
-  }
-  if (to.meta.role && auth.user?.role !== to.meta.role) {
-    return next(auth.isAdmin ? '/admin' : '/app')
-  }
-  next()
+    // Chưa đăng nhập
+    if (!auth.isLoggedIn) {
+        if (to.path !== '/login' && to.path !== '/register') {
+            return next('/login')
+        }
+        return next()
+    }
+
+    // Đã đăng nhập mà vào login
+    if (to.path === '/login' || to.path === '/register') {
+        return next(auth.isAdmin ? '/admin/dashboard' : '/app/dashboard')
+    }
+
+    // Kiểm tra quyền
+    if (to.meta.role && auth.user?.role !== to.meta.role) {
+        return next(auth.isAdmin ? '/admin/dashboard' : '/app/dashboard')
+    }
+
+    next()
 })
 
 export default router

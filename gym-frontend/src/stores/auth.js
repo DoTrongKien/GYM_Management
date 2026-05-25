@@ -6,6 +6,8 @@ import { ElMessage } from 'element-plus'
 export const useAuthStore = defineStore('auth', () => {
   const token   = ref(localStorage.getItem('token') || '')
   const user    = ref(JSON.parse(localStorage.getItem('user') || 'null'))
+  // const token = ref('')
+  // const user = ref(null)
   const loading = ref(false)
 
   const isLoggedIn = computed(() => !!token.value)

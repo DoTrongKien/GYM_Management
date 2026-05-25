@@ -16,17 +16,25 @@ api.interceptors.request.use(config => {
 
 // Response interceptor — handle errors globally
 api.interceptors.response.use(
-  res => res.data,
-  err => {
-    const msg = err.response?.data?.message || 'Lỗi kết nối server'
-    if (err.response?.status === 401) {
-      localStorage.clear()
-      window.location.href = '/login'
-    } else if (err.response?.status !== 404) {
-      ElMessage.error(msg)
+    res => res.data,
+    err => {
+      const msg = err.response?.data?.message || 'Lỗi kết nối server'
+
+      if (
+          err.response?.status === 401 ||
+          err.response?.status === 403
+      ) {
+        localStorage.clear()
+        window.location.href = '/login'
+        return Promise.reject(err)
+      }
+
+      if (err.response?.status !== 404) {
+        ElMessage.error(msg)
+      }
+
+      return Promise.reject(err)
     }
-    return Promise.reject(err)
-  }
 )
 
 export default api
