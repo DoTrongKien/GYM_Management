@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
-
+// daanh gia cua admin
 @Entity
 @Table(name = "service_ratings")
 @Getter
@@ -41,4 +41,5 @@ public class ServiceRating {
             createdAt = LocalDateTime.now();
         }
     }
+
 }
