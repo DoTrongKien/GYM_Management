@@ -45,8 +45,13 @@ public class SecurityConfig {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
+                // --- THÊM DÒNG NÀY ĐỂ H2 CONSOLE CHẠY ĐƯỢC TRONG IFRAME ---
+                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // --- THÊM DÒNG NÀY ĐỂ CHO PHÉP TRUY CẬP H2 ---
+                        .requestMatchers("/h2-console/**").permitAll()
+
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/exercises").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/ratings/public").permitAll()

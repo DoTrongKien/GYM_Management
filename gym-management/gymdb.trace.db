@@ -1,0 +1,6 @@
+2026-05-25 16:25:17.611420+07:00 jdbc[4]: exception
+org.h2.jdbc.JdbcSQLDataException: Value too long for column "VIDEO_URL CHARACTER VARYING(255)": "'https://www.googleadservices.com/pagead/aclk?sa=L&ai=C03lgcBUUaoKnEvXHr7wPo-bi6... (2617)"; SQL statement:
+update exercises set calories_burned=?,default_duration_seconds=?,default_reps=?,default_sets=?,description=?,difficulty=?,image_url=?,is_active=?,muscle_group=?,name=?,rest_seconds=?,video_url=? where id=? [22001-232]
+2026-05-25 16:25:18.081380+07:00 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLDataException: Value too long for column "VIDEO_URL CHARACTER VARYING(255)": "'https://www.googleadservices.com/pagead/aclk?sa=L&ai=C03lgcBUUaoKnEvXHr7wPo-bi6... (2617)"; SQL statement:
+update exercises set calories_burned=?,default_duration_seconds=?,default_reps=?,default_sets=?,description=?,difficulty=?,image_url=?,is_active=?,muscle_group=?,name=?,rest_seconds=?,video_url=? where id=? [22001-232]
