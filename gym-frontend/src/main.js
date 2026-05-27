@@ -12,10 +12,13 @@ const app = createApp(App)
 
 // Register all Element Plus icons
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-  app.component(key, component)
+    app.component(key, component)
 }
 
 app.use(createPinia())
 app.use(router)
 app.use(ElementPlus)
-app.mount('#app')
+
+router.isReady().then(() => {
+    app.mount('#app')
+})

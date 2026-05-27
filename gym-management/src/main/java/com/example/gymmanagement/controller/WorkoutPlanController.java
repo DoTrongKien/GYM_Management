@@ -1,5 +1,6 @@
 package com.example.gymmanagement.controller;
 
+import com.example.gymmanagement.dto.request.GeneratePlanRequest;
 import com.example.gymmanagement.dto.request.WorkoutPlanRequest;
 import com.example.gymmanagement.dto.response.*;
 import com.example.gymmanagement.service.WorkoutPlanService;
@@ -18,32 +19,49 @@ public class WorkoutPlanController {
 
     private final WorkoutPlanService planService;
 
+    // Tạo giáo án AI từ profile (không cần body)
     @PostMapping("/generate")
-    public ResponseEntity<ApiResponse<WorkoutPlanResponse>> generateAIPlan(
-            @AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<ApiResponse<WorkoutPlanResponse>> generateFromProfile(
+            @AuthenticationPrincipal UserDetails ud) {
         return ResponseEntity.ok(ApiResponse.success(
-                planService.generateAIPlan(userDetails.getUsername()),
-                "AI workout plan generated successfully!"));
+                planService.generateAIPlan(ud.getUsername()),
+                "Giáo án AI đã được tạo thành công!"));
     }
 
+    // Tạo giáo án AI với mục tiêu tùy chọn (có thể override profile)
+    @PostMapping("/generate-custom")
+    public ResponseEntity<ApiResponse<WorkoutPlanResponse>> generateWithGoal(
+            @AuthenticationPrincipal UserDetails ud,
+            @RequestBody GeneratePlanRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                planService.generatePlanWithGoal(
+                        ud.getUsername(),
+                        request.getGoal(),
+                        request.getFitnessLevel(),
+                        request.getAvailableDaysPerWeek()
+                ),
+                "Giáo án đã được tạo theo mục tiêu của bạn!"));
+    }
+
+    // Tạo giáo án thủ công
     @PostMapping
-    public ResponseEntity<ApiResponse<WorkoutPlanResponse>> createCustomPlan(
-            @AuthenticationPrincipal UserDetails userDetails,
+    public ResponseEntity<ApiResponse<WorkoutPlanResponse>> createCustom(
+            @AuthenticationPrincipal UserDetails ud,
             @RequestBody WorkoutPlanRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
-                planService.createCustomPlan(userDetails.getUsername(), request),
-                "Workout plan created"));
+                planService.createCustomPlan(ud.getUsername(), request),
+               "Giáo án đã được tạo!"));
     }
 
     @GetMapping("/active")
-    public ResponseEntity<ApiResponse<WorkoutPlanResponse>> getActivePlan(
-            @AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(ApiResponse.success(planService.getActivePlan(userDetails.getUsername())));
+    public ResponseEntity<ApiResponse<WorkoutPlanResponse>> getActive(
+            @AuthenticationPrincipal UserDetails ud) {
+        return ResponseEntity.ok(ApiResponse.success(planService.getActivePlan(ud.getUsername())));
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<WorkoutPlanResponse>>> getAllPlans(
-            @AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(ApiResponse.success(planService.getAllPlans(userDetails.getUsername())));
+    public ResponseEntity<ApiResponse<List<WorkoutPlanResponse>>> getAll(
+            @AuthenticationPrincipal UserDetails ud) {
+        return ResponseEntity.ok(ApiResponse.success(planService.getAllPlans(ud.getUsername())));
     }
 }

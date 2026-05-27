@@ -18,13 +18,20 @@ api.interceptors.request.use(config => {
 api.interceptors.response.use(
     res => res.data,
     err => {
+      const status = err.response?.status
       const msg = err.response?.data?.message || 'Lỗi kết nối server'
-      if (err.response?.status === 401) {
-        localStorage.clear()
-        window.location.href = '/login'
-      } else if (err.response?.status !== 404) {
+
+      if (status === 401 || status === 403) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login'
+        }
+      } else if (status !== 404) {
         ElMessage.error(msg)
       }
+
       return Promise.reject(err)
     }
 )
@@ -47,10 +54,11 @@ export const profileAPI = {
 
 // ── Workout Plans ─────────────────────────────
 export const planAPI = {
-  generate:     ()     => api.post('/workout-plans/generate'),
-  getActive:    ()     => api.get('/workout-plans/active'),
-  getAll:       ()     => api.get('/workout-plans'),
-  createCustom: (data) => api.post('/workout-plans', data)
+  generate:         ()     => api.post('/workout-plans/generate'),
+  generateWithGoal: (data) => api.post('/workout-plans/generate-custom', data),
+  getActive:        ()     => api.get('/workout-plans/active'),
+  getAll:           ()     => api.get('/workout-plans'),
+  createCustom:     (data) => api.post('/workout-plans', data)
 }
 
 // ── Sessions ──────────────────────────────────

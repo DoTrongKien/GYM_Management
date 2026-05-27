@@ -7,27 +7,31 @@
 
     <el-card>
       <el-table :data="exercises" v-loading="loading" stripe>
-        <el-table-column label="ID"   prop="id"   width="60" align="center"/>
-        <el-table-column label="Tên"  prop="name" min-width="160"/>
-        <el-table-column label="Nhóm cơ" prop="muscleGroup" width="120"/>
+        <el-table-column label="ID"   prop="id"   width="55" align="center"/>
+        <el-table-column label="Tên"  prop="name" min-width="150"/>
+        <el-table-column label="Nhóm cơ" prop="muscleGroup" width="110"/>
         <el-table-column label="Độ khó" width="110" align="center">
           <template #default="{row}">
             <span class="badge" :class="diffBadge(row.difficulty)">{{ diffLabel(row.difficulty) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="Sets" prop="defaultSets" width="65" align="center"/>
-        <el-table-column label="Reps/Thời gian" width="130" align="center">
-          <template #default="{row}">{{ row.defaultReps ? row.defaultReps+' reps' : (row.defaultDurationSeconds ? row.defaultDurationSeconds+'s' : '--') }}</template>
-        </el-table-column>
-        <el-table-column label="Kcal/set" prop="caloriesBurned" width="90" align="center"/>
-        <el-table-column label="Video" width="80" align="center">
+        <!-- Score columns -->
+        <el-table-column label="💪 Tăng cơ" width="85" align="center">
           <template #default="{row}">
-            <el-icon :color="row.videoUrl?'var(--c-success)':'var(--c-text3)'">
-              <VideoPlay v-if="row.videoUrl"/><Minus v-else/>
-            </el-icon>
+            <span :style="{color: scoreColor(row.muscleGainScore), fontWeight:700}">{{ row.muscleGainScore }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="Trạng thái" width="100" align="center">
+        <el-table-column label="🔥 Giảm cân" width="90" align="center">
+          <template #default="{row}">
+            <span :style="{color: scoreColor(row.weightLossScore), fontWeight:700}">{{ row.weightLossScore }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="🏃 Sức bền" width="85" align="center">
+          <template #default="{row}">
+            <span :style="{color: scoreColor(row.enduranceScore), fontWeight:700}">{{ row.enduranceScore }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Trạng thái" width="95" align="center">
           <template #default="{row}">
             <span class="badge" :class="row.isActive?'badge-success':'badge-danger'">{{ row.isActive?'Active':'Ẩn' }}</span>
           </template>
@@ -42,13 +46,14 @@
     </el-card>
 
     <!-- Add/Edit Dialog -->
-    <el-dialog v-model="formDialog" :title="editId?'SỬA BÀI TẬP':'THÊM BÀI TẬP'" width="520px" align-center>
+    <el-dialog v-model="formDialog" :title="editId?'SỬA BÀI TẬP':'THÊM BÀI TẬP'" width="580px" align-center>
       <el-form :model="form" label-position="top">
+        <!-- Thông tin cơ bản -->
         <el-form-item label="Tên bài tập">
           <el-input v-model="form.name" placeholder="VD: Bench Press"/>
         </el-form-item>
         <el-form-item label="Mô tả">
-          <el-input v-model="form.description" type="textarea" :rows="2" placeholder="Mô tả ngắn về bài tập..."/>
+          <el-input v-model="form.description" type="textarea" :rows="2"/>
         </el-form-item>
         <div class="grid-2">
           <el-form-item label="Nhóm cơ">
@@ -75,10 +80,46 @@
             <el-input-number v-model="form.caloriesBurned" :min="0" :max="200" style="width:100%"/>
           </el-form-item>
         </div>
-        <el-form-item label="Link video YouTube (tuỳ chọn)">
-          <el-input v-model="form.videoUrl" placeholder="https://www.youtube.com/watch?v=..."/>
+        <el-form-item label="Link video YouTube">
+          <el-input v-model="form.videoUrl" placeholder="https://youtube.com/watch?v=..."/>
         </el-form-item>
+
+        <!-- Điểm hiệu quả theo mục tiêu -->
+        <div class="score-section">
+          <div class="score-section-title">⭐ ĐIỂM HIỆU QUẢ THEO MỤC TIÊU (0–10)</div>
+          <div style="font-size:0.78rem;color:var(--c-text3);margin-bottom:14px">
+            Điểm càng cao → bài tập càng được ưu tiên khi tạo giáo án với mục tiêu đó
+          </div>
+          <div class="score-inputs">
+            <div class="score-input-item">
+              <div class="score-input-label">💪 Tăng cơ</div>
+              <el-slider v-model="form.muscleGainScore" :min="0" :max="10" :step="1" show-stops/>
+              <div class="score-input-val" :style="{color:scoreColor(form.muscleGainScore)}">{{ form.muscleGainScore }}/10</div>
+            </div>
+            <div class="score-input-item">
+              <div class="score-input-label">🔥 Giảm cân</div>
+              <el-slider v-model="form.weightLossScore" :min="0" :max="10" :step="1" show-stops/>
+              <div class="score-input-val" :style="{color:scoreColor(form.weightLossScore)}">{{ form.weightLossScore }}/10</div>
+            </div>
+            <div class="score-input-item">
+              <div class="score-input-label">🏃 Sức bền</div>
+              <el-slider v-model="form.enduranceScore" :min="0" :max="10" :step="1" show-stops/>
+              <div class="score-input-val" :style="{color:scoreColor(form.enduranceScore)}">{{ form.enduranceScore }}/10</div>
+            </div>
+            <div class="score-input-item">
+              <div class="score-input-label">🤸 Linh hoạt</div>
+              <el-slider v-model="form.flexibilityScore" :min="0" :max="10" :step="1" show-stops/>
+              <div class="score-input-val" :style="{color:scoreColor(form.flexibilityScore)}">{{ form.flexibilityScore }}/10</div>
+            </div>
+            <div class="score-input-item">
+              <div class="score-input-label">⚖️ Duy trì</div>
+              <el-slider v-model="form.maintenanceScore" :min="0" :max="10" :step="1" show-stops/>
+              <div class="score-input-val" :style="{color:scoreColor(form.maintenanceScore)}">{{ form.maintenanceScore }}/10</div>
+            </div>
+          </div>
+        </div>
       </el-form>
+
       <template #footer>
         <el-button @click="formDialog=false">Hủy</el-button>
         <el-button type="primary" @click="submit">{{ editId?'CẬP NHẬT':'THÊM MỚI' }}</el-button>
@@ -98,34 +139,78 @@ const formDialog = ref(false)
 const editId     = ref(null)
 const muscles    = ['CHEST','BACK','SHOULDERS','ARMS','LEGS','CORE','CARDIO','FULL_BODY']
 
-const form = reactive({ name:'', description:'', muscleGroup:'CHEST', difficulty:'MEDIUM', defaultSets:3, defaultReps:10, caloriesBurned:8, videoUrl:'' })
+const defaultForm = () => ({
+  name:'', description:'', muscleGroup:'CHEST', difficulty:'MEDIUM',
+  defaultSets:3, defaultReps:10, caloriesBurned:8, videoUrl:'', restSeconds:60,
+  muscleGainScore:5, weightLossScore:5, enduranceScore:5, flexibilityScore:5, maintenanceScore:5
+})
+const form = reactive(defaultForm())
 
 async function load() {
   loading.value = true
   try { const r = await exerciseAPI.getAll(); exercises.value = r.data || [] }
   finally { loading.value = false }
 }
+
 function openAdd() {
   editId.value = null
-  Object.assign(form, { name:'', description:'', muscleGroup:'CHEST', difficulty:'MEDIUM', defaultSets:3, defaultReps:10, caloriesBurned:8, videoUrl:'' })
+  Object.assign(form, defaultForm())
   formDialog.value = true
 }
+
 function openEdit(row) {
   editId.value = row.id
-  Object.assign(form, { name:row.name, description:row.description||'', muscleGroup:row.muscleGroup, difficulty:row.difficulty, defaultSets:row.defaultSets, defaultReps:row.defaultReps||0, caloriesBurned:row.caloriesBurned||0, videoUrl:row.videoUrl||'' })
+  Object.assign(form, {
+    name: row.name, description: row.description||'',
+    muscleGroup: row.muscleGroup, difficulty: row.difficulty,
+    defaultSets: row.defaultSets||3, defaultReps: row.defaultReps||0,
+    caloriesBurned: row.caloriesBurned||0, videoUrl: row.videoUrl||'',
+    restSeconds: row.restSeconds||60,
+    muscleGainScore:  row.muscleGainScore  ?? 5,
+    weightLossScore:  row.weightLossScore  ?? 5,
+    enduranceScore:   row.enduranceScore   ?? 5,
+    flexibilityScore: row.flexibilityScore ?? 5,
+    maintenanceScore: row.maintenanceScore ?? 5,
+  })
   formDialog.value = true
 }
+
 async function submit() {
   if (!form.name) { ElMessage.warning('Nhập tên bài tập'); return }
-  if (editId.value) { await exerciseAPI.update(editId.value, form); ElMessage.success('Đã cập nhật!') }
-  else              { await exerciseAPI.create(form); ElMessage.success('Đã thêm bài tập!') }
+  if (editId.value) { await exerciseAPI.update(editId.value, { ...form }); ElMessage.success('Đã cập nhật!') }
+  else              { await exerciseAPI.create({ ...form }); ElMessage.success('Đã thêm bài tập!') }
   formDialog.value = false; load()
 }
+
 async function remove(id) {
   await ElMessageBox.confirm('Ẩn bài tập này?', 'Xác nhận', { type:'warning' })
   await exerciseAPI.delete(id); ElMessage.success('Đã ẩn bài tập'); load()
 }
-function diffLabel(d) { return { EASY:'Dễ', MEDIUM:'Trung bình', HARD:'Khó' }[d]||d }
-function diffBadge(d) { return { EASY:'badge-success', MEDIUM:'badge-warning', HARD:'badge-danger' }[d]||'' }
+
+function scoreColor(v) {
+  if (!v && v !== 0) return 'var(--c-text3)'
+  if (v >= 8) return 'var(--c-success)'
+  if (v >= 5) return 'var(--c-warning)'
+  return 'var(--c-danger)'
+}
+function diffLabel(d) { return { EASY:'Dễ',MEDIUM:'Trung bình',HARD:'Khó' }[d]||d }
+function diffBadge(d) { return { EASY:'badge-success',MEDIUM:'badge-warning',HARD:'badge-danger' }[d]||'' }
+
 onMounted(load)
 </script>
+
+<style scoped>
+.score-section {
+  background:var(--c-card2); border:1px solid var(--c-border2);
+  border-radius:var(--radius-lg); padding:16px; margin-top:8px;
+}
+.score-section-title {
+  font-family:var(--font-display); font-size:0.9rem; letter-spacing:0.06em;
+  color:var(--c-accent); margin-bottom:6px;
+}
+.score-inputs { display:flex; flex-direction:column; gap:12px; }
+.score-input-item { display:flex; align-items:center; gap:12px; }
+.score-input-label { width:90px; font-size:0.82rem; font-weight:600; color:var(--c-text2); flex-shrink:0; }
+.score-input-val   { width:38px; font-family:var(--font-mono); font-size:0.8rem; font-weight:700; text-align:right; flex-shrink:0; }
+.el-slider { flex:1; }
+</style>
