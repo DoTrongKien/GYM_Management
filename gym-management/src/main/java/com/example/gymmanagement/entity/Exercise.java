@@ -24,18 +24,29 @@ public class Exercise {
     @Enumerated(EnumType.STRING)
     private Difficulty difficulty;
 
-    private Integer caloriesBurned;    // kcal per set
+    private Integer caloriesBurned;
     private Integer defaultSets;
     private Integer defaultReps;
     private Integer defaultDurationSeconds;
     private Integer restSeconds;
-    // ── Điểm hiệu quả theo mục tiêu (0-10) ──────────────────
-    // Càng cao → bài tập càng phù hợp với mục tiêu đó
-    @Builder.Default private Integer muscleGainScore  = 5; // tăng cơ
-    @Builder.Default private Integer weightLossScore  = 5; // giảm cân
-    @Builder.Default private Integer enduranceScore   = 5; // sức bền
-    @Builder.Default private Integer flexibilityScore = 5; // linh hoạt
-    @Builder.Default private Integer maintenanceScore = 5; // duy trì
 
-    @Builder.Default private Boolean isActive = true;
+    // ── Chỉ số benefit cho từng mục tiêu (0-10) ─────────────────
+    // Điểm càng cao = bài tập càng phù hợp với mục tiêu đó
+    @Builder.Default
+    private Integer muscleGainScore   = 0;  // điểm tăng cơ
+
+    @Builder.Default
+    private Integer weightLossScore   = 0;  // điểm giảm cân
+
+    @Builder.Default
+    private Integer enduranceScore    = 0;  // điểm sức bền
+
+    @Builder.Default
+    private Integer flexibilityScore  = 0;  // điểm linh hoạt
+
+    @Builder.Default
+    private Integer maintenanceScore  = 0;  // điểm duy trì
+
+    @Builder.Default
+    private Boolean isActive = true;
 }

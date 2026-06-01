@@ -30,9 +30,11 @@ public class ExerciseController {
                     MuscleGroup.valueOf(muscleGroup.toUpperCase()),
                     Difficulty.valueOf(difficulty.toUpperCase()));
         } else if (muscleGroup != null) {
-            list = exerciseRepository.findByMuscleGroupAndIsActiveTrue(MuscleGroup.valueOf(muscleGroup.toUpperCase()));
+            list = exerciseRepository.findByMuscleGroupAndIsActiveTrue(
+                    MuscleGroup.valueOf(muscleGroup.toUpperCase()));
         } else if (difficulty != null) {
-            list = exerciseRepository.findByDifficultyAndIsActiveTrue(Difficulty.valueOf(difficulty.toUpperCase()));
+            list = exerciseRepository.findByDifficultyAndIsActiveTrue(
+                    Difficulty.valueOf(difficulty.toUpperCase()));
         } else {
             list = exerciseRepository.findByIsActiveTrue();
         }
@@ -41,8 +43,9 @@ public class ExerciseController {
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<Exercise>> getById(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.success(
-                exerciseRepository.findById(id).orElseThrow(() -> new RuntimeException("Exercise not found"))));
+        Exercise ex = exerciseRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Exercise not found"));
+        return ResponseEntity.ok(ApiResponse.success(ex));
     }
 
     @PostMapping
@@ -56,48 +59,47 @@ public class ExerciseController {
                 .defaultSets(req.getDefaultSets()).defaultReps(req.getDefaultReps())
                 .defaultDurationSeconds(req.getDefaultDurationSeconds())
                 .restSeconds(req.getRestSeconds())
-                .muscleGainScore (orDefault(req.getMuscleGainScore(),  5))
-                .weightLossScore (orDefault(req.getWeightLossScore(),  5))
-                .enduranceScore  (orDefault(req.getEnduranceScore(),   5))
-                .flexibilityScore(orDefault(req.getFlexibilityScore(), 5))
-                .maintenanceScore(orDefault(req.getMaintenanceScore(), 5))
-                .isActive(true)
-                .build();
-        return ResponseEntity.ok(ApiResponse.success(exerciseRepository.save(ex), "Exercise created"));
+                .muscleGainScore(req.getMuscleGainScore()   != null ? req.getMuscleGainScore()   : 0)
+                .weightLossScore(req.getWeightLossScore()   != null ? req.getWeightLossScore()   : 0)
+                .enduranceScore(req.getEnduranceScore()     != null ? req.getEnduranceScore()    : 0)
+                .flexibilityScore(req.getFlexibilityScore() != null ? req.getFlexibilityScore() : 0)
+                .maintenanceScore(req.getMaintenanceScore() != null ? req.getMaintenanceScore() : 0)
+                .isActive(true).build();
+        return ResponseEntity.ok(ApiResponse.success(exerciseRepository.save(ex), "Đã thêm bài tập!"));
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('ROLE_ADMIN')")
-    public ResponseEntity<ApiResponse<Exercise>> update(@PathVariable Long id, @RequestBody ExerciseRequest req) {
+    public ResponseEntity<ApiResponse<Exercise>> update(@PathVariable Long id,
+                                                        @RequestBody ExerciseRequest req) {
         Exercise ex = exerciseRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Exercise not found"));
-        if (req.getName()                != null) ex.setName(req.getName());
-        if (req.getDescription()         != null) ex.setDescription(req.getDescription());
-        if (req.getMuscleGroup()         != null) ex.setMuscleGroup(req.getMuscleGroup());
-        if (req.getDifficulty()          != null) ex.setDifficulty(req.getDifficulty());
-        if (req.getCaloriesBurned()      != null) ex.setCaloriesBurned(req.getCaloriesBurned());
-        if (req.getDefaultSets()         != null) ex.setDefaultSets(req.getDefaultSets());
-        if (req.getDefaultReps()         != null) ex.setDefaultReps(req.getDefaultReps());
-        if (req.getVideoUrl()            != null) ex.setVideoUrl(req.getVideoUrl());
-        if (req.getRestSeconds()         != null) ex.setRestSeconds(req.getRestSeconds());
-        if (req.getMuscleGainScore()     != null) ex.setMuscleGainScore(req.getMuscleGainScore());
-        if (req.getWeightLossScore()     != null) ex.setWeightLossScore(req.getWeightLossScore());
-        if (req.getEnduranceScore()      != null) ex.setEnduranceScore(req.getEnduranceScore());
-        if (req.getFlexibilityScore()    != null) ex.setFlexibilityScore(req.getFlexibilityScore());
-        if (req.getMaintenanceScore()    != null) ex.setMaintenanceScore(req.getMaintenanceScore());
-        return ResponseEntity.ok(ApiResponse.success(exerciseRepository.save(ex), "Exercise updated"));
+        if (req.getName()        != null) ex.setName(req.getName());
+        if (req.getDescription() != null) ex.setDescription(req.getDescription());
+        if (req.getMuscleGroup() != null) ex.setMuscleGroup(req.getMuscleGroup());
+        if (req.getDifficulty()  != null) ex.setDifficulty(req.getDifficulty());
+        if (req.getCaloriesBurned()         != null) ex.setCaloriesBurned(req.getCaloriesBurned());
+        if (req.getDefaultSets()            != null) ex.setDefaultSets(req.getDefaultSets());
+        if (req.getDefaultReps()            != null) ex.setDefaultReps(req.getDefaultReps());
+        if (req.getDefaultDurationSeconds() != null) ex.setDefaultDurationSeconds(req.getDefaultDurationSeconds());
+        if (req.getRestSeconds()            != null) ex.setRestSeconds(req.getRestSeconds());
+        if (req.getVideoUrl()               != null) ex.setVideoUrl(req.getVideoUrl());
+        // Cập nhật scores
+        if (req.getMuscleGainScore()   != null) ex.setMuscleGainScore(req.getMuscleGainScore());
+        if (req.getWeightLossScore()   != null) ex.setWeightLossScore(req.getWeightLossScore());
+        if (req.getEnduranceScore()    != null) ex.setEnduranceScore(req.getEnduranceScore());
+        if (req.getFlexibilityScore()  != null) ex.setFlexibilityScore(req.getFlexibilityScore());
+        if (req.getMaintenanceScore()  != null) ex.setMaintenanceScore(req.getMaintenanceScore());
+        return ResponseEntity.ok(ApiResponse.success(exerciseRepository.save(ex), "Đã cập nhật!"));
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
-        Exercise ex = exerciseRepository.findById(id).orElseThrow(() -> new RuntimeException("Exercise not found"));
+        Exercise ex = exerciseRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Exercise not found"));
         ex.setIsActive(false);
         exerciseRepository.save(ex);
-        return ResponseEntity.ok(ApiResponse.success(null, "Exercise deactivated"));
-    }
-
-    private Integer orDefault(Integer val, int def) {
-        return val != null ? val : def;
+        return ResponseEntity.ok(ApiResponse.success(null, "Đã ẩn bài tập"));
     }
 }

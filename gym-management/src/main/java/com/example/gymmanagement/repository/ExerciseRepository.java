@@ -13,13 +13,13 @@ public interface ExerciseRepository extends JpaRepository<Exercise, Long> {
 
     List<Exercise> findByIsActiveTrue();
 
-    List<Exercise> findByMuscleGroupAndIsActiveTrue(MuscleGroup muscleGroup);
+    List<Exercise> findByMuscleGroupAndDifficultyAndIsActiveTrue(MuscleGroup muscleGroup, Difficulty difficulty);
 
     List<Exercise> findByDifficultyAndIsActiveTrue(Difficulty difficulty);
 
-    List<Exercise> findByMuscleGroupAndDifficultyAndIsActiveTrue(MuscleGroup muscleGroup, Difficulty difficulty);
+    List<Exercise> findByMuscleGroupAndIsActiveTrue(MuscleGroup muscleGroup);
 
-    // Lấy bài tập theo nhóm cơ, sắp xếp theo điểm mục tiêu GIẢM DẦN
+    // Tìm bài tập theo nhóm cơ, sắp xếp theo điểm mục tiêu giảm cơ
     @Query("SELECT e FROM Exercise e WHERE e.muscleGroup = :mg AND e.isActive = true ORDER BY e.muscleGainScore DESC")
     List<Exercise> findByMuscleGroupOrderByMuscleGain(@Param("mg") MuscleGroup mg);
 
@@ -35,13 +35,13 @@ public interface ExerciseRepository extends JpaRepository<Exercise, Long> {
     @Query("SELECT e FROM Exercise e WHERE e.muscleGroup = :mg AND e.isActive = true ORDER BY e.maintenanceScore DESC")
     List<Exercise> findByMuscleGroupOrderByMaintenance(@Param("mg") MuscleGroup mg);
 
-    // Lấy tất cả bài tập active sắp xếp theo từng điểm
+    // Tìm top bài tập cho mục tiêu (không phân biệt nhóm cơ)
     @Query("SELECT e FROM Exercise e WHERE e.isActive = true ORDER BY e.muscleGainScore DESC")
-    List<Exercise> findAllOrderByMuscleGain();
+    List<Exercise> findTopByMuscleGain();
 
     @Query("SELECT e FROM Exercise e WHERE e.isActive = true ORDER BY e.weightLossScore DESC")
-    List<Exercise> findAllOrderByWeightLoss();
+    List<Exercise> findTopByWeightLoss();
 
     @Query("SELECT e FROM Exercise e WHERE e.isActive = true ORDER BY e.enduranceScore DESC")
-    List<Exercise> findAllOrderByEndurance();
+    List<Exercise> findTopByEndurance();
 }

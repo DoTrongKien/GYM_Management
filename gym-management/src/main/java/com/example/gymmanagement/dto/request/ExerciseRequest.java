@@ -18,10 +18,10 @@ public class ExerciseRequest {
     private Integer defaultDurationSeconds;
     private Integer restSeconds;
 
-    // Điểm hiệu quả theo mục tiêu (0-10)
-    private Integer muscleGainScore;
-    private Integer weightLossScore;
-    private Integer enduranceScore;
-    private Integer flexibilityScore;
-    private Integer maintenanceScore;
+    // Benefit scores (0-10)
+    private Integer muscleGainScore  = 0;
+    private Integer weightLossScore  = 0;
+    private Integer enduranceScore   = 0;
+    private Integer flexibilityScore = 0;
+    private Integer maintenanceScore = 0;
 }

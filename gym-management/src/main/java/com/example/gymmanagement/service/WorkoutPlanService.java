@@ -24,39 +24,43 @@ public class WorkoutPlanService {
     private final ExerciseRepository exerciseRepository;
     private final UserProfileRepository profileRepository;
 
-    // ── Generate AI Plan ────────────────────────────────────────
+    // ── Tạo giáo án AI ──────────────────────────────────────────
     @Transactional
     public WorkoutPlanResponse generateAIPlan(String email) {
         User user = getUser(email);
+
         UserProfile profile = profileRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new RuntimeException("Hãy hoàn thiện hồ sơ trước khi tạo giáo án."));
 
-        Goal goal         = profile.getGoal()         != null ? profile.getGoal()         : Goal.MAINTENANCE;
-        FitnessLevel level= profile.getFitnessLevel() != null ? profile.getFitnessLevel() : FitnessLevel.BEGINNER;
-        int daysPerWeek   = profile.getAvailableDaysPerWeek() != null ? profile.getAvailableDaysPerWeek() : 3;
+        Goal goal = profile.getGoal() != null ? profile.getGoal() : Goal.MAINTENANCE;
+        FitnessLevel level = profile.getFitnessLevel() != null ? profile.getFitnessLevel() : FitnessLevel.BEGINNER;
+        int daysPerWeek = profile.getAvailableDaysPerWeek() != null ? profile.getAvailableDaysPerWeek() : 3;
 
         return buildAndSavePlan(user, goal, level, daysPerWeek, true);
     }
 
-    // ── Generate Plan với mục tiêu tùy chọn ────────────────────
+    // ── Tạo giáo án AI với mục tiêu tuỳ chọn ───────────────────
     @Transactional
-    public WorkoutPlanResponse generatePlanWithGoal(String email, Goal goal, FitnessLevel level, Integer daysPerWeek) {
+    public WorkoutPlanResponse generateAIPlanWithGoal(String email, Goal goal, FitnessLevel level, Integer daysPerWeek) {
         User user = getUser(email);
 
-        // Nếu không truyền thì lấy từ profile
-        if (goal == null || level == null || daysPerWeek == null) {
-            UserProfile profile = profileRepository.findByUserId(user.getId())
-                    .orElseThrow(() -> new RuntimeException("Hãy hoàn thiện hồ sơ trước."));
-            if (goal        == null) goal        = profile.getGoal()         != null ? profile.getGoal()         : Goal.MAINTENANCE;
-            if (level       == null) level       = profile.getFitnessLevel() != null ? profile.getFitnessLevel() : FitnessLevel.BEGINNER;
-            if (daysPerWeek == null) daysPerWeek = profile.getAvailableDaysPerWeek() != null ? profile.getAvailableDaysPerWeek() : 3;
+        // Lấy daysPerWeek từ profile nếu không truyền
+        if (daysPerWeek == null || daysPerWeek < 1) {
+            daysPerWeek = profileRepository.findByUserId(user.getId())
+                    .map(p -> p.getAvailableDaysPerWeek() != null ? p.getAvailableDaysPerWeek() : 3)
+                    .orElse(3);
+        }
+        if (level == null) {
+            level = profileRepository.findByUserId(user.getId())
+                    .map(p -> p.getFitnessLevel() != null ? p.getFitnessLevel() : FitnessLevel.BEGINNER)
+                    .orElse(FitnessLevel.BEGINNER);
         }
 
         return buildAndSavePlan(user, goal, level, daysPerWeek, true);
     }
 
     private WorkoutPlanResponse buildAndSavePlan(User user, Goal goal, FitnessLevel level, int daysPerWeek, boolean isAi) {
-        // Deactivate old plan
+        // Deactivate plan cũ
         planRepository.findByUserIdAndIsActiveTrue(user.getId()).ifPresent(p -> {
             p.setIsActive(false);
             planRepository.save(p);
@@ -65,7 +69,7 @@ public class WorkoutPlanService {
         WorkoutPlan plan = WorkoutPlan.builder()
                 .user(user)
                 .planName(generatePlanName(goal, level))
-                .description(generateDescription(goal, level, daysPerWeek))
+                .description(generatePlanDescription(goal, level, daysPerWeek))
                 .goal(goal)
                 .targetLevel(level)
                 .durationWeeks(8)
@@ -77,18 +81,21 @@ public class WorkoutPlanService {
 
         List<WorkoutPlanDay> days = generatePlanDays(plan, goal, level, daysPerWeek);
         planDayRepository.saveAll(days);
+
         generateWeeklySessions(user, plan, days, 8);
 
         plan.setPlanDays(days);
         return buildPlanResponse(plan);
     }
 
-    // ── Tạo plan thủ công ───────────────────────────────────────
+    // ── Tạo giáo án thủ công ────────────────────────────────────
     @Transactional
     public WorkoutPlanResponse createCustomPlan(String email, WorkoutPlanRequest request) {
         User user = getUser(email);
+
         planRepository.findByUserIdAndIsActiveTrue(user.getId()).ifPresent(p -> {
-            p.setIsActive(false); planRepository.save(p);
+            p.setIsActive(false);
+            planRepository.save(p);
         });
 
         WorkoutPlan plan = WorkoutPlan.builder()
@@ -103,13 +110,14 @@ public class WorkoutPlanService {
                 .isAiGenerated(false)
                 .build();
         planRepository.save(plan);
+
         return buildPlanResponse(plan);
     }
 
     public WorkoutPlanResponse getActivePlan(String email) {
         User user = getUser(email);
         WorkoutPlan plan = planRepository.findByUserIdAndIsActiveTrue(user.getId())
-                .orElseThrow(() -> new RuntimeException("Chưa có giáo án active."));
+                .orElseThrow(() -> new RuntimeException("Chưa có giáo án active. Hãy tạo giáo án mới."));
         plan.setPlanDays(planDayRepository.findByWorkoutPlanIdOrderByDayOfWeek(plan.getId()));
         return buildPlanResponse(plan);
     }
@@ -117,257 +125,319 @@ public class WorkoutPlanService {
     public List<WorkoutPlanResponse> getAllPlans(String email) {
         User user = getUser(email);
         return planRepository.findByUserIdOrderByCreatedAtDesc(user.getId()).stream()
-                .map(p -> { p.setPlanDays(planDayRepository.findByWorkoutPlanIdOrderByDayOfWeek(p.getId())); return buildPlanResponse(p); })
+                .map(p -> {
+                    p.setPlanDays(planDayRepository.findByWorkoutPlanIdOrderByDayOfWeek(p.getId()));
+                    return buildPlanResponse(p);
+                })
                 .collect(Collectors.toList());
     }
 
-    // ── Core: tạo các ngày trong tuần ──────────────────────────
+    // ── Core: tạo các ngày tập dựa theo goal ────────────────────
     private List<WorkoutPlanDay> generatePlanDays(WorkoutPlan plan, Goal goal, FitnessLevel level, int daysPerWeek) {
-        List<String[]> schedule = getSchedule(goal, daysPerWeek);
+        // Cấu hình nhóm cơ theo mục tiêu
+        List<List<MuscleGroup>> dayConfigs = getDayConfigs(goal, daysPerWeek);
+
         int[] dayOfWeekMap = {1, 3, 5, 2, 4, 6, 7};
         String[] dayNames  = {"Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"};
 
         List<WorkoutPlanDay> days = new ArrayList<>();
-        for (int i = 0; i < Math.min(daysPerWeek, schedule.size()); i++) {
+
+        for (int i = 0; i < Math.min(daysPerWeek, dayConfigs.size()); i++) {
             WorkoutPlanDay day = WorkoutPlanDay.builder()
                     .workoutPlan(plan)
                     .dayOfWeek(dayOfWeekMap[i])
                     .dayName(dayNames[dayOfWeekMap[i] - 1])
                     .build();
 
-            List<WorkoutPlanExercise> exercises = buildExercisesForDay(day, schedule.get(i), goal, level);
+            List<WorkoutPlanExercise> exercises = generateExercisesForDay(day, dayConfigs.get(i), goal, level);
             day.setExercises(exercises);
             days.add(day);
         }
         return days;
     }
 
-    // ── Lịch tập theo mục tiêu (nhóm cơ mỗi ngày) ─────────────
-    private List<String[]> getSchedule(Goal goal, int days) {
-        List<String[]> full = switch (goal) {
-            case MUSCLE_GAIN -> List.of(
-                    new String[]{"CHEST","ARMS"},
-                    new String[]{"BACK","SHOULDERS"},
-                    new String[]{"LEGS"},
-                    new String[]{"CHEST","CORE"},
-                    new String[]{"BACK","ARMS"},
-                    new String[]{"LEGS","SHOULDERS"},
-                    new String[]{"FULL_BODY"}
-            );
-            case WEIGHT_LOSS -> List.of(
-                    new String[]{"CARDIO","CORE"},
-                    new String[]{"FULL_BODY"},
-                    new String[]{"CARDIO","LEGS"},
-                    new String[]{"BACK","CHEST"},
-                    new String[]{"CARDIO","ARMS"},
-                    new String[]{"FULL_BODY","CORE"},
-                    new String[]{"CARDIO"}
-            );
-            case ENDURANCE -> List.of(
-                    new String[]{"CARDIO"},
-                    new String[]{"LEGS","CORE"},
-                    new String[]{"CARDIO"},
-                    new String[]{"FULL_BODY"},
-                    new String[]{"CARDIO","SHOULDERS"},
-                    new String[]{"LEGS"},
-                    new String[]{"CARDIO","CORE"}
-            );
-            case FLEXIBILITY -> List.of(
-                    new String[]{"CORE","SHOULDERS"},
-                    new String[]{"LEGS","CORE"},
-                    new String[]{"BACK","SHOULDERS"},
-                    new String[]{"CORE","LEGS"},
-                    new String[]{"FULL_BODY"},
-                    new String[]{"CORE"},
-                    new String[]{"LEGS","SHOULDERS"}
-            );
-            default -> List.of(  // MAINTENANCE
-                    new String[]{"FULL_BODY"},
-                    new String[]{"CARDIO","CORE"},
-                    new String[]{"CHEST","BACK"},
-                    new String[]{"LEGS"},
-                    new String[]{"SHOULDERS","ARMS"},
-                    new String[]{"CARDIO"},
-                    new String[]{"CORE","FULL_BODY"}
-            );
-        };
-        return full.subList(0, Math.min(days, full.size()));
+    /**
+     * Cấu hình nhóm cơ cho từng ngày tập theo mục tiêu.
+     * MUSCLE_GAIN  → tập cơ nặng, chia bộ phận rõ ràng
+     * WEIGHT_LOSS  → nhiều cardio + toàn thân
+     * ENDURANCE    → cardio + cơ lõi + toàn thân
+     * FLEXIBILITY  → linh hoạt, yoga, kéo giãn
+     * MAINTENANCE  → cân bằng tất cả
+     */
+    private List<List<MuscleGroup>> getDayConfigs(Goal goal, int days) {
+        List<List<MuscleGroup>> all;
+
+        switch (goal) {
+            case MUSCLE_GAIN:
+                all = List.of(
+                        List.of(MuscleGroup.CHEST, MuscleGroup.ARMS),
+                        List.of(MuscleGroup.BACK, MuscleGroup.SHOULDERS),
+                        List.of(MuscleGroup.LEGS),
+                        List.of(MuscleGroup.CHEST, MuscleGroup.CORE),
+                        List.of(MuscleGroup.BACK, MuscleGroup.ARMS),
+                        List.of(MuscleGroup.LEGS, MuscleGroup.SHOULDERS),
+                        List.of(MuscleGroup.FULL_BODY)
+                );
+                break;
+            case WEIGHT_LOSS:
+                all = List.of(
+                        List.of(MuscleGroup.CARDIO, MuscleGroup.CORE),
+                        List.of(MuscleGroup.FULL_BODY),
+                        List.of(MuscleGroup.CARDIO, MuscleGroup.LEGS),
+                        List.of(MuscleGroup.BACK, MuscleGroup.CHEST),
+                        List.of(MuscleGroup.CARDIO, MuscleGroup.ARMS),
+                        List.of(MuscleGroup.FULL_BODY, MuscleGroup.CORE),
+                        List.of(MuscleGroup.CARDIO)
+                );
+                break;
+            case ENDURANCE:
+                all = List.of(
+                        List.of(MuscleGroup.CARDIO),
+                        List.of(MuscleGroup.FULL_BODY),
+                        List.of(MuscleGroup.CARDIO, MuscleGroup.CORE),
+                        List.of(MuscleGroup.LEGS, MuscleGroup.CARDIO),
+                        List.of(MuscleGroup.FULL_BODY, MuscleGroup.CORE),
+                        List.of(MuscleGroup.CARDIO),
+                        List.of(MuscleGroup.FULL_BODY)
+                );
+                break;
+            case FLEXIBILITY:
+                all = List.of(
+                        List.of(MuscleGroup.FULL_BODY, MuscleGroup.CORE),
+                        List.of(MuscleGroup.LEGS, MuscleGroup.BACK),
+                        List.of(MuscleGroup.SHOULDERS, MuscleGroup.ARMS),
+                        List.of(MuscleGroup.FULL_BODY),
+                        List.of(MuscleGroup.CORE, MuscleGroup.LEGS),
+                        List.of(MuscleGroup.BACK, MuscleGroup.CHEST),
+                        List.of(MuscleGroup.FULL_BODY)
+                );
+                break;
+            default: // MAINTENANCE
+                all = List.of(
+                        List.of(MuscleGroup.FULL_BODY),
+                        List.of(MuscleGroup.CARDIO, MuscleGroup.CORE),
+                        List.of(MuscleGroup.CHEST, MuscleGroup.BACK),
+                        List.of(MuscleGroup.LEGS),
+                        List.of(MuscleGroup.SHOULDERS, MuscleGroup.ARMS),
+                        List.of(MuscleGroup.CARDIO, MuscleGroup.FULL_BODY),
+                        List.of(MuscleGroup.CORE)
+                );
+        }
+
+        return all.subList(0, Math.min(days, all.size()));
     }
 
-    // ── Chọn bài tập theo SCORE cao nhất cho mục tiêu ──────────
-    private List<WorkoutPlanExercise> buildExercisesForDay(WorkoutPlanDay day, String[] muscleGroups, Goal goal, FitnessLevel level) {
+    /**
+     * Chọn bài tập cho 1 ngày dựa theo mục tiêu.
+     * Ưu tiên bài tập có score cao nhất cho goal đó.
+     * Số bài tập tùy trình độ: Beginner=2, Inter=3, Advanced=4
+     */
+    private List<WorkoutPlanExercise> generateExercisesForDay(
+            WorkoutPlanDay day, List<MuscleGroup> muscleGroups, Goal goal, FitnessLevel level) {
+
         List<WorkoutPlanExercise> result = new ArrayList<>();
+        int exercisesPerGroup = level == FitnessLevel.BEGINNER ? 2 : level == FitnessLevel.INTERMEDIATE ? 3 : 4;
         int orderIndex = 1;
-        int maxPerGroup = level == FitnessLevel.BEGINNER ? 2 : level == FitnessLevel.INTERMEDIATE ? 3 : 4;
 
-        for (String groupStr : muscleGroups) {
-            try {
-                MuscleGroup mg = MuscleGroup.valueOf(groupStr.trim());
+        for (MuscleGroup mg : muscleGroups) {
+            // Lấy danh sách bài tập của nhóm cơ này, ưu tiên theo score mục tiêu
+            List<Exercise> candidates = getExercisesByGoalScore(mg, goal);
 
-                // Lấy bài tập sắp xếp theo score của mục tiêu (cao → thấp)
-                List<Exercise> pool = getExercisesByGoalScore(mg, goal);
+            int take = Math.min(candidates.size(), exercisesPerGroup);
+            for (int i = 0; i < take; i++) {
+                Exercise ex = candidates.get(i);
 
-                // Lọc theo difficulty phù hợp với level
-                List<Exercise> filtered = filterByLevel(pool, level);
-                if (filtered.isEmpty()) filtered = pool; // fallback nếu không có
+                // Điều chỉnh sets/reps theo trình độ và mục tiêu
+                int[] setsReps = adjustSetsReps(ex, goal, level);
 
-                int count = Math.min(filtered.size(), maxPerGroup);
-                for (int i = 0; i < count; i++) {
-                    Exercise ex = filtered.get(i);
-                    result.add(WorkoutPlanExercise.builder()
-                            .planDay(day)
-                            .exercise(ex)
-                            .sets(adjustSets(ex.getDefaultSets(), level, goal))
-                            .reps(ex.getDefaultReps())
-                            .durationSeconds(ex.getDefaultDurationSeconds())
-                            .restSeconds(adjustRest(ex.getRestSeconds(), goal))
-                            .orderIndex(orderIndex++)
-                            .notes(buildNotes(ex, goal))
-                            .build());
-                }
-            } catch (IllegalArgumentException ignored) {}
+                WorkoutPlanExercise planEx = WorkoutPlanExercise.builder()
+                        .planDay(day)
+                        .exercise(ex)
+                        .sets(setsReps[0])
+                        .reps(ex.getDefaultReps() != null ? setsReps[1] : null)
+                        .durationSeconds(ex.getDefaultDurationSeconds() != null
+                                ? adjustDuration(ex.getDefaultDurationSeconds(), level) : null)
+                        .restSeconds(adjustRest(ex.getRestSeconds(), goal))
+                        .orderIndex(orderIndex++)
+                        .notes(buildNotes(ex, goal))
+                        .build();
+                result.add(planEx);
+            }
         }
         return result;
     }
 
-    // ── Lấy bài tập theo score mục tiêu ─────────────────────────
+    /**
+     * Lấy danh sách bài tập của nhóm cơ, sắp xếp theo score mục tiêu giảm dần.
+     */
     private List<Exercise> getExercisesByGoalScore(MuscleGroup mg, Goal goal) {
-        List<Exercise> all = exerciseRepository.findByMuscleGroupAndIsActiveTrue(mg);
-        return all.stream()
-                .sorted((a, b) -> getScore(b, goal) - getScore(a, goal))
-                .collect(Collectors.toList());
+        switch (goal) {
+            case MUSCLE_GAIN:  return exerciseRepository.findByMuscleGroupOrderByMuscleGain(mg);
+            case WEIGHT_LOSS:  return exerciseRepository.findByMuscleGroupOrderByWeightLoss(mg);
+            case ENDURANCE:    return exerciseRepository.findByMuscleGroupOrderByEndurance(mg);
+            case FLEXIBILITY:  return exerciseRepository.findByMuscleGroupOrderByFlexibility(mg);
+            default:           return exerciseRepository.findByMuscleGroupOrderByMaintenance(mg);
+        }
     }
 
-    private int getScore(Exercise ex, Goal goal) {
-        return switch (goal) {
-            case MUSCLE_GAIN  -> ex.getMuscleGainScore()  != null ? ex.getMuscleGainScore()  : 5;
-            case WEIGHT_LOSS  -> ex.getWeightLossScore()  != null ? ex.getWeightLossScore()  : 5;
-            case ENDURANCE    -> ex.getEnduranceScore()   != null ? ex.getEnduranceScore()   : 5;
-            case FLEXIBILITY  -> ex.getFlexibilityScore() != null ? ex.getFlexibilityScore() : 5;
-            default           -> ex.getMaintenanceScore() != null ? ex.getMaintenanceScore() : 5;
+    /**
+     * Điều chỉnh sets/reps theo mục tiêu:
+     * MUSCLE_GAIN  → ít reps, nhiều tạ (4x6-10)
+     * WEIGHT_LOSS  → nhiều reps, ít nghỉ (3x15-20)
+     * ENDURANCE    → nhiều reps siêu nhẹ (3x20+)
+     * FLEXIBILITY  → ít sets, giữ lâu
+     * MAINTENANCE  → cân bằng (3x12)
+     */
+    private int[] adjustSetsReps(Exercise ex, Goal goal, FitnessLevel level) {
+        int baseSets = ex.getDefaultSets() != null ? ex.getDefaultSets() : 3;
+        int baseReps = ex.getDefaultReps() != null ? ex.getDefaultReps() : 12;
+
+        int sets, reps;
+        switch (goal) {
+            case MUSCLE_GAIN:
+                sets = level == FitnessLevel.BEGINNER ? 3 : level == FitnessLevel.INTERMEDIATE ? 4 : 5;
+                reps = level == FitnessLevel.BEGINNER ? 10 : level == FitnessLevel.INTERMEDIATE ? 8 : 6;
+                break;
+            case WEIGHT_LOSS:
+                sets = 3;
+                reps = level == FitnessLevel.BEGINNER ? 15 : 20;
+                break;
+            case ENDURANCE:
+                sets = level == FitnessLevel.BEGINNER ? 2 : 3;
+                reps = level == FitnessLevel.BEGINNER ? 15 : 25;
+                break;
+            case FLEXIBILITY:
+                sets = 2;
+                reps = baseReps; // sẽ dùng duration thay reps
+                break;
+            default: // MAINTENANCE
+                sets = baseSets;
+                reps = baseReps;
+        }
+        return new int[]{sets, reps};
+    }
+
+    private int adjustDuration(int baseDuration, FitnessLevel level) {
+        return switch (level) {
+            case BEGINNER     -> (int)(baseDuration * 0.7);
+            case INTERMEDIATE -> baseDuration;
+            case ADVANCED     -> (int)(baseDuration * 1.3);
         };
     }
 
-    private List<Exercise> filterByLevel(List<Exercise> pool, FitnessLevel level) {
-        Difficulty target = switch (level) {
-            case BEGINNER     -> Difficulty.EASY;
-            case INTERMEDIATE -> Difficulty.MEDIUM;
-            case ADVANCED     -> Difficulty.HARD;
-        };
-        // BEGINNER → EASY, INTERMEDIATE → EASY+MEDIUM, ADVANCED → tất cả
-        return pool.stream().filter(e -> switch (level) {
-            case BEGINNER     -> e.getDifficulty() == Difficulty.EASY;
-            case INTERMEDIATE -> e.getDifficulty() != Difficulty.HARD;
-            case ADVANCED     -> true;
-        }).collect(Collectors.toList());
-    }
-
-    // Điều chỉnh sets theo level và mục tiêu
-    private Integer adjustSets(Integer base, FitnessLevel level, Goal goal) {
-        if (base == null) return 3;
-        int adjusted = base;
-        if (level == FitnessLevel.BEGINNER)  adjusted = Math.max(2, base - 1);
-        if (level == FitnessLevel.ADVANCED)  adjusted = base + 1;
-        if (goal == Goal.WEIGHT_LOSS)        adjusted = Math.max(adjusted, 3); // nhiều sets giảm cân
-        return adjusted;
-    }
-
-    // Điều chỉnh thời gian nghỉ theo mục tiêu
-    private Integer adjustRest(Integer base, Goal goal) {
-        if (base == null) return 60;
+    private int adjustRest(Integer baseRest, Goal goal) {
+        if (baseRest == null) baseRest = 60;
         return switch (goal) {
-            case MUSCLE_GAIN -> base + 30;    // nghỉ dài hơn để tăng cơ
-            case WEIGHT_LOSS -> Math.max(30, base - 15); // nghỉ ngắn để giữ nhịp tim
-            case ENDURANCE   -> Math.max(20, base - 20); // nghỉ ngắn nhất
-            default          -> base;
+            case MUSCLE_GAIN  -> (int)(baseRest * 1.3); // nghỉ nhiều hơn để tạ nặng hơn
+            case WEIGHT_LOSS  -> (int)(baseRest * 0.7); // nghỉ ít để nhịp tim cao
+            case ENDURANCE    -> (int)(baseRest * 0.6);
+            case FLEXIBILITY  -> 30;
+            default           -> baseRest;
         };
     }
 
     private String buildNotes(Exercise ex, Goal goal) {
-        int score = getScore(ex, goal);
-        if (score >= 9) return "⭐ Bài tập tối ưu cho mục tiêu của bạn";
+        int score = getGoalScore(ex, goal);
+        if (score >= 9) return "⭐ Bài tập hàng đầu cho mục tiêu này";
         if (score >= 7) return "✅ Phù hợp tốt với mục tiêu";
         return null;
     }
 
-    // ── Sessions generator ───────────────────────────────────────
+    private int getGoalScore(Exercise ex, Goal goal) {
+        return switch (goal) {
+            case MUSCLE_GAIN  -> ex.getMuscleGainScore()  != null ? ex.getMuscleGainScore()  : 0;
+            case WEIGHT_LOSS  -> ex.getWeightLossScore()  != null ? ex.getWeightLossScore()  : 0;
+            case ENDURANCE    -> ex.getEnduranceScore()   != null ? ex.getEnduranceScore()   : 0;
+            case FLEXIBILITY  -> ex.getFlexibilityScore() != null ? ex.getFlexibilityScore() : 0;
+            default           -> ex.getMaintenanceScore() != null ? ex.getMaintenanceScore() : 0;
+        };
+    }
+
     private void generateWeeklySessions(User user, WorkoutPlan plan, List<WorkoutPlanDay> days, int weeks) {
-        List<WorkoutSession> sessions = new ArrayList<>();
+        List<com.example.gymmanagement.entity.WorkoutSession> sessions = new ArrayList<>();
         LocalDate startDate = LocalDate.now();
+
         for (int week = 1; week <= weeks; week++) {
             for (WorkoutPlanDay day : days) {
                 LocalDate sessionDate = startDate.plusWeeks(week - 1)
                         .with(java.time.DayOfWeek.of(day.getDayOfWeek()));
-                sessions.add(WorkoutSession.builder()
+                sessions.add(com.example.gymmanagement.entity.WorkoutSession.builder()
                         .user(user).workoutPlan(plan).planDay(day)
                         .sessionDate(sessionDate)
-                        .status(SessionStatus.SCHEDULED)
-                        .weekNumber(week).build());
+                        .status(com.example.gymmanagement.enums.SessionStatus.SCHEDULED)
+                        .weekNumber(week)
+                        .isCustom(false)
+                        .build());
             }
         }
         sessionRepository.saveAll(sessions);
     }
 
-    // ── Tên và mô tả giáo án ─────────────────────────────────────
     private String generatePlanName(Goal goal, FitnessLevel level) {
         String g = switch (goal) {
-            case WEIGHT_LOSS -> "Fat Burning";
-            case MUSCLE_GAIN -> "Muscle Builder";
-            case ENDURANCE   -> "Endurance Pro";
-            case FLEXIBILITY -> "Flexibility Flow";
-            default          -> "Balanced Fitness";
+            case WEIGHT_LOSS  -> "Fat Burning";
+            case MUSCLE_GAIN  -> "Muscle Building";
+            case ENDURANCE    -> "Endurance";
+            case FLEXIBILITY  -> "Flexibility";
+            default           -> "Balanced";
         };
         String l = switch (level) {
             case BEGINNER     -> "Starter";
             case INTERMEDIATE -> "Progress";
             case ADVANCED     -> "Elite";
         };
-        return g + " — " + l;
+        return g + " " + l + " Plan";
     }
 
-    private String generateDescription(Goal goal, FitnessLevel level, int days) {
+    private String generatePlanDescription(Goal goal, FitnessLevel level, int days) {
+        String goalVi = switch (goal) {
+            case WEIGHT_LOSS  -> "giảm cân & đốt mỡ";
+            case MUSCLE_GAIN  -> "tăng cơ & sức mạnh";
+            case ENDURANCE    -> "tăng sức bền";
+            case FLEXIBILITY  -> "tăng linh hoạt";
+            default           -> "duy trì thể hình";
+        };
         return String.format(
-                "Giáo án AI %d ngày/tuần trong 8 tuần, dành cho cấp độ %s. " +
-                        "Bài tập được chọn lọc theo điểm hiệu quả cao nhất cho mục tiêu %s. " +
-                        "Sets, reps và thời gian nghỉ được tối ưu theo cấp độ của bạn.",
-                days,
-                switch (level) { case BEGINNER -> "Mới bắt đầu"; case INTERMEDIATE -> "Trung bình"; default -> "Nâng cao"; },
-                switch (goal) { case WEIGHT_LOSS -> "Giảm cân"; case MUSCLE_GAIN -> "Tăng cơ"; case ENDURANCE -> "Sức bền"; case FLEXIBILITY -> "Linh hoạt"; default -> "Duy trì"; }
+                "Giáo án AI tối ưu cho mục tiêu %s, trình độ %s. %d buổi/tuần, 8 tuần. " +
+                        "Bài tập được chọn lọc theo chỉ số phù hợp mục tiêu của bạn.",
+                goalVi, level.name().toLowerCase(), days
         );
     }
 
-    // ── Build responses ──────────────────────────────────────────
+    // ── Build response ───────────────────────────────────────────
     public WorkoutPlanResponse buildPlanResponse(WorkoutPlan plan) {
-        List<WorkoutPlanDayResponse> dayRes = Optional.ofNullable(plan.getPlanDays())
+        List<WorkoutPlanDayResponse> dayResponses = Optional.ofNullable(plan.getPlanDays())
                 .orElse(Collections.emptyList()).stream()
-                .map(this::buildDayResponse).collect(Collectors.toList());
+                .map(this::buildDayResponse)
+                .collect(Collectors.toList());
+
         return WorkoutPlanResponse.builder()
-                .id(plan.getId()).planName(plan.getPlanName()).description(plan.getDescription())
-                .goal(plan.getGoal()).targetLevel(plan.getTargetLevel())
-                .durationWeeks(plan.getDurationWeeks()).sessionsPerWeek(plan.getSessionsPerWeek())
-                .isActive(plan.getIsActive()).isAiGenerated(plan.getIsAiGenerated())
-                .createdAt(plan.getCreatedAt()).planDays(dayRes).build();
+                .id(plan.getId()).planName(plan.getPlanName())
+                .description(plan.getDescription()).goal(plan.getGoal())
+                .targetLevel(plan.getTargetLevel()).durationWeeks(plan.getDurationWeeks())
+                .sessionsPerWeek(plan.getSessionsPerWeek()).isActive(plan.getIsActive())
+                .isAiGenerated(plan.getIsAiGenerated()).createdAt(plan.getCreatedAt())
+                .planDays(dayResponses).build();
     }
 
     private WorkoutPlanDayResponse buildDayResponse(WorkoutPlanDay day) {
-        List<WorkoutPlanExerciseResponse> exRes = Optional.ofNullable(day.getExercises())
-                .orElse(Collections.emptyList()).stream()
-                .map(this::buildExerciseResponse).collect(Collectors.toList());
         return WorkoutPlanDayResponse.builder()
                 .id(day.getId()).dayOfWeek(day.getDayOfWeek()).dayName(day.getDayName())
-                .exercises(exRes).build();
+                .exercises(Optional.ofNullable(day.getExercises()).orElse(Collections.emptyList())
+                        .stream().map(this::buildExerciseResponse).collect(Collectors.toList()))
+                .build();
     }
 
     private WorkoutPlanExerciseResponse buildExerciseResponse(WorkoutPlanExercise pe) {
+        Exercise ex = pe.getExercise();
         return WorkoutPlanExerciseResponse.builder()
-                .id(pe.getId()).exerciseId(pe.getExercise().getId())
-                .exerciseName(pe.getExercise().getName())
-                .muscleGroup(pe.getExercise().getMuscleGroup() != null ? pe.getExercise().getMuscleGroup().name() : null)
-                .difficulty(pe.getExercise().getDifficulty()  != null ? pe.getExercise().getDifficulty().name()  : null)
+                .id(pe.getId()).exerciseId(ex.getId()).exerciseName(ex.getName())
+                .muscleGroup(ex.getMuscleGroup() != null ? ex.getMuscleGroup().name() : null)
+                .difficulty(ex.getDifficulty() != null ? ex.getDifficulty().name() : null)
                 .sets(pe.getSets()).reps(pe.getReps()).durationSeconds(pe.getDurationSeconds())
                 .restSeconds(pe.getRestSeconds()).orderIndex(pe.getOrderIndex())
-                .notes(pe.getNotes()).videoUrl(pe.getExercise().getVideoUrl())
-                .caloriesBurned(pe.getExercise().getCaloriesBurned()).build();
+                .notes(pe.getNotes()).videoUrl(ex.getVideoUrl()).caloriesBurned(ex.getCaloriesBurned())
+                .build();
     }
 
     private User getUser(String email) {
