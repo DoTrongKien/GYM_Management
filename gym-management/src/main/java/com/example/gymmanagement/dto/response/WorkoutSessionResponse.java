@@ -24,4 +24,6 @@ public class WorkoutSessionResponse {
     private String customSessionName;
     private Boolean isCustom;
     private List<ExerciseLogResponse> exerciseLogs;
+    // Các bài tập mẫu từ planDay (để hiển thị khi check-in)
+    private List<WorkoutPlanExerciseResponse> planExercises;
 }

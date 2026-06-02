@@ -1,7 +1,7 @@
 package com.example.gymmanagement.controller;
 
 import com.example.gymmanagement.dto.request.CheckInRequest;
-import com.example.gymmanagement.dto.request.ScheduleSessionRequest;
+import com.example.gymmanagement.dto.request.EnrollSessionRequest;
 import com.example.gymmanagement.dto.response.*;
 import com.example.gymmanagement.service.WorkoutSessionService;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +19,26 @@ import java.util.Map;
 public class WorkoutSessionController {
 
     private final WorkoutSessionService sessionService;
+
+    // Đăng ký 1 buổi tập (từ planDay hoặc custom)
+    @PostMapping("/enroll")
+    public ResponseEntity<ApiResponse<WorkoutSessionResponse>> enroll(
+            @AuthenticationPrincipal UserDetails ud,
+            @RequestBody EnrollSessionRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                sessionService.enrollSession(ud.getUsername(), request),
+                "Đã đăng ký lịch tập!"));
+    }
+
+    // Tiến trình tuần hiện tại của plan
+    @GetMapping("/week-progress")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> weekProgress(
+            @AuthenticationPrincipal UserDetails ud,
+            @RequestParam Long planId,
+            @RequestParam Integer weekNumber) {
+        return ResponseEntity.ok(ApiResponse.success(
+                sessionService.getWeekProgress(ud.getUsername(), planId, weekNumber)));
+    }
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<WorkoutSessionResponse>>> getMySessions(
@@ -38,15 +58,6 @@ public class WorkoutSessionController {
         return ResponseEntity.ok(ApiResponse.success(sessionService.getSessionById(ud.getUsername(), id)));
     }
 
-    @PostMapping("/schedule")
-    public ResponseEntity<ApiResponse<WorkoutSessionResponse>> schedule(
-            @AuthenticationPrincipal UserDetails ud,
-            @RequestBody ScheduleSessionRequest request) {
-        return ResponseEntity.ok(ApiResponse.success(
-                sessionService.scheduleCustomSession(ud.getUsername(), request),
-                "Lịch tập đã được đăng ký!"));
-    }
-
     @PostMapping("/{id}/check-in")
     public ResponseEntity<ApiResponse<WorkoutSessionResponse>> checkIn(
             @AuthenticationPrincipal UserDetails ud, @PathVariable Long id) {
@@ -56,20 +67,18 @@ public class WorkoutSessionController {
 
     @PostMapping("/{id}/complete")
     public ResponseEntity<ApiResponse<WorkoutSessionResponse>> complete(
-            @AuthenticationPrincipal UserDetails ud,
-            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails ud, @PathVariable Long id,
             @RequestBody CheckInRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
-                sessionService.completeSession(ud.getUsername(), id, request), "Hoàn thành buổi tập! 🎉"));
+                sessionService.completeSession(ud.getUsername(), id, request), "Hoàn thành! 🎉"));
     }
 
     @PostMapping("/{id}/skip")
     public ResponseEntity<ApiResponse<WorkoutSessionResponse>> skip(
-            @AuthenticationPrincipal UserDetails ud,
-            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails ud, @PathVariable Long id,
             @RequestBody(required = false) Map<String, String> body) {
-        String notes = body != null ? body.get("notes") : null;
-        return ResponseEntity.ok(ApiResponse.success(sessionService.skipSession(ud.getUsername(), id, notes)));
+        return ResponseEntity.ok(ApiResponse.success(
+                sessionService.skipSession(ud.getUsername(), id, body != null ? body.get("notes") : null)));
     }
 
     @DeleteMapping("/{id}")

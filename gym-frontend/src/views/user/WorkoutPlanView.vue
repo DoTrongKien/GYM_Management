@@ -4,7 +4,7 @@
       <h2>GIÁO ÁN TẬP</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <el-button @click="allPlansDialog=true" plain>📋 Tất cả giáo án</el-button>
-        <el-button @click="goalDialog=true" type="primary">✨ Tạo giáo án AI</el-button>
+        <el-button @click="goalDialog=true" type="primary">✨ Tạo giáo án </el-button>
       </div>
     </div>
 
@@ -13,7 +13,7 @@
       <div style="font-size:4rem;margin-bottom:16px">🤖</div>
       <h3 class="display" style="font-size:1.8rem;color:var(--c-text);margin-bottom:8px">CHƯA CÓ GIÁO ÁN</h3>
       <p style="color:var(--c-text2);margin-bottom:20px;max-width:440px;margin-left:auto;margin-right:auto">
-        AI sẽ tự động chọn bài tập phù hợp nhất theo mục tiêu của bạn, dựa trên chỉ số benefit của từng bài.
+        Hệ thống sẽ tự động chọn bài tập phù hợp nhất theo mục tiêu của bạn, dựa trên chỉ số benefit của từng bài.
       </p>
       <el-button type="primary" size="large" @click="goalDialog=true">✨ Chọn mục tiêu & Tạo giáo án</el-button>
     </div>
@@ -34,7 +34,7 @@
               <el-tag type="info">{{ levelLabel(plan.targetLevel) }}</el-tag>
               <el-tag>{{ plan.durationWeeks }} tuần</el-tag>
               <el-tag>{{ plan.sessionsPerWeek }} buổi/tuần</el-tag>
-              <el-tag v-if="plan.isAiGenerated" type="success">✨ AI</el-tag>
+              <el-tag v-if="plan.isAiGenerated" type="success">✨ Hệ Thống</el-tag>
             </div>
           </div>
           <el-button type="primary" plain size="small" @click="goalDialog=true">
@@ -74,7 +74,7 @@
     </template>
 
     <!-- ── Dialog chọn mục tiêu AI ─────────────────────────── -->
-    <el-dialog v-model="goalDialog" title="TẠO GIÁO ÁN AI" width="520px" align-center>
+    <el-dialog v-model="goalDialog" title="TẠO GIÁO ÁN " width="520px" align-center>
       <div style="margin-bottom:20px">
         <div style="font-weight:700;color:var(--c-text);margin-bottom:12px">🎯 Chọn mục tiêu chính</div>
         <div class="goal-grid">
@@ -255,7 +255,7 @@ async function generateWithGoal() {
     const r = await planAPI.generateWithGoal(payload)
     plan.value = r.data
     goalDialog.value = false
-    ElMessage.success('Giáo án AI đã được tạo theo mục tiêu ' + genForm.goal + '! 🎉')
+    ElMessage.success('Giáo án đã được tạo theo mục tiêu ' + genForm.goal + '! 🎉')
     genForm.goal = ''; genForm.fitnessLevel = null; genForm.daysPerWeek = null
     load()
   } catch {} finally { generating.value = false }
