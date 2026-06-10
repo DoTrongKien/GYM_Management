@@ -51,7 +51,9 @@ export const planAPI = {
     generateWithGoal: (data) => api.post('/workout-plans/generate-with-goal', data),
     getActive:    ()     => api.get('/workout-plans/active'),
     getAll:       ()     => api.get('/workout-plans'),
-    createCustom: (data) => api.post('/workout-plans', data)
+    createCustom: (data) => api.post('/workout-plans', data),
+    // Thêm hàm bọc API điều chỉnh tuần
+    adjustWeek:   (id, data) => api.post(`/workout-plans/${id}/adjust-week`, data)
 }
 
 // ── Sessions ──────────────────────────────────
@@ -64,7 +66,9 @@ export const sessionAPI = {
     schedule:   (data)       => api.post('/sessions/schedule', data),
     complete:     (id, data)   => api.post(`/sessions/${id}/check-out`, data),
     skip:         (id, notes)  => api.post(`/sessions/${id}/skip`, { notes }),
-    delete:       (id)         => api.delete(`/sessions/${id}`)
+    delete:       (id)         => api.delete(`/sessions/${id}`),
+    // Thêm hàm bọc API lấy tiến độ tuần từ WorkoutSessionController
+    getWeekProgress: (planId, weekNumber) => api.get(`/sessions/week-progress?planId=${planId}&weekNumber=${weekNumber}`)
 }
 
 // ── Progress ──────────────────────────────────

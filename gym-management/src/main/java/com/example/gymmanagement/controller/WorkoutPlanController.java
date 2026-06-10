@@ -32,18 +32,38 @@ public class WorkoutPlanController {
                         req.getFitnessLevel(), req.getDaysPerWeek()),
                 "Giáo án AI đã được tạo!"));
     }
-
     // Điều chỉnh giáo án sau khi hoàn thành 1 tuần
     @PostMapping("/{id}/adjust-week")
     public ResponseEntity<ApiResponse<WorkoutPlanResponse>> adjustWeek(
             @AuthenticationPrincipal UserDetails ud,
             @PathVariable Long id,
             @RequestBody Map<String, Object> body) {
-        Double weight  = body.get("newWeight")  != null ? Double.parseDouble(body.get("newWeight").toString())  : null;
-        Double bodyFat = body.get("newBodyFat") != null ? Double.parseDouble(body.get("newBodyFat").toString()) : null;
-        return ResponseEntity.ok(ApiResponse.success(
-                planService.adjustPlanAfterWeek(id, ud.getUsername(), weight, bodyFat),
-                "Giáo án đã được điều chỉnh cho tuần tiếp theo!"));
+
+        try {
+            Double weight = null;
+            Double bodyFat = null;
+
+            if (body.get("newWeight") != null) {
+                weight = Double.parseDouble(body.get("newWeight").toString());
+            }
+            if (body.get("newBodyFat") != null) {
+                bodyFat = Double.parseDouble(body.get("newBodyFat").toString());
+            }
+
+            WorkoutPlanResponse updatedPlan = planService.adjustPlanAfterWeek(
+                    id, ud.getUsername(), weight, bodyFat);
+
+            return ResponseEntity.ok(ApiResponse.success(
+                    updatedPlan,
+                    "Giáo án đã được AI điều chỉnh thành công cho tuần tiếp theo!"));
+
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().body(
+                    ApiResponse.error("Dữ liệu cân nặng hoặc body fat không hợp lệ"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(
+                    ApiResponse.error("Không thể điều chỉnh giáo án: " + e.getMessage()));
+        }
     }
 
     @GetMapping("/active")

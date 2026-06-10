@@ -10,8 +10,13 @@ import java.util.List;
 
 @Entity
 @Table(name = "workout_plans")
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class WorkoutPlan {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -50,10 +55,16 @@ public class WorkoutPlan {
     // Điều chỉnh tự động theo tiến độ
     @Builder.Default
     private Integer difficultyAdjustment = 0; // -1=giảm, 0=giữ, 1=tăng
+
     @Builder.Default
     private Integer setsAdjustment       = 0;
+
     @Builder.Default
     private Integer repsAdjustment       = 0;
+
+    // === TRƯỜNG MỚI: Điều chỉnh số lượng bài tập ===
+    @Builder.Default
+    private Integer exercisesAdjustment  = 0;
 
     private LocalDateTime createdAt;
 

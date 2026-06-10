@@ -3,8 +3,10 @@ package com.example.gymmanagement.repository;
 import com.example.gymmanagement.entity.WorkoutSession;
 import com.example.gymmanagement.enums.SessionStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -33,7 +35,6 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSession, 
     @Query("SELECT s FROM WorkoutSession s WHERE s.user.id=:uid AND s.workoutPlan.id=:planId AND s.weekNumber=:week ORDER BY s.sessionDate")
     List<WorkoutSession> findByPlanAndWeek(@Param("uid") Long uid, @Param("planId") Long planId, @Param("week") Integer week);
 
-    // Buổi cuối tuần (để biết cần nhập tiến độ)
     @Query("SELECT s FROM WorkoutSession s WHERE s.user.id=:uid AND s.workoutPlan.id=:planId AND s.weekNumber=:week AND s.isLastSessionOfWeek=true")
     List<WorkoutSession> findLastSessionOfWeek(@Param("uid") Long uid, @Param("planId") Long planId, @Param("week") Integer week);
 
@@ -50,4 +51,14 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSession, 
     List<WorkoutSession> findAllUpcomingSessions(@Param("date") LocalDate date,
                                                  @Param("from") LocalTime from,
                                                  @Param("to") LocalTime to);
+
+    // ==================== THÊM MỚI ĐỂ XÓA AN TOÀN KHI ĐIỀU CHỈNH GIÁO ÁN ====================
+    void deleteByPlanDayId(Long planDayId);
+
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM WorkoutSession s WHERE s.planDay.id IN :planDayIds")
+    void deleteByPlanDayIds(@Param("planDayIds") List<Long> planDayIds);
+
+    List<WorkoutSession> findByPlanDayId(Long planDayId);
 }
