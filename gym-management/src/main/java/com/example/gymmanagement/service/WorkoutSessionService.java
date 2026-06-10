@@ -1,7 +1,6 @@
 package com.example.gymmanagement.service;
 
-import com.example.gymmanagement.dto.request.CheckInRequest;
-import com.example.gymmanagement.dto.request.EnrollSessionRequest;
+import com.example.gymmanagement.dto.request.*;
 import com.example.gymmanagement.dto.response.*;
 import com.example.gymmanagement.entity.*;
 import com.example.gymmanagement.enums.SessionStatus;
@@ -19,15 +18,16 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class WorkoutSessionService {
 
-    private final WorkoutSessionRepository sessionRepository;
-    private final SessionExerciseLogRepository logRepository;
-    private final ExerciseRepository exerciseRepository;
-    private final UserRepository userRepository;
-    private final WorkoutPlanRepository planRepository;
-    private final WorkoutPlanDayRepository planDayRepository;
-    private final NotificationService notificationService;
+    private final WorkoutSessionRepository  sessionRepo;
+    private final SessionExerciseLogRepository logRepo;
+    private final ExerciseRepository        exerciseRepo;
+    private final UserRepository            userRepo;
+    private final WorkoutPlanRepository     planRepo;
+    private final WorkoutPlanDayRepository  dayRepo;
+    private final NotificationService       notifService;
+    private final UserProfileRepository     profileRepo;
 
-    // ── Đăng ký 1 buổi tập từ planDay ────────────────────────
+    // ── Đăng ký buổi tập ─────────────────────────────────────
     @Transactional
     public WorkoutSessionResponse enrollSession(String email, EnrollSessionRequest req) {
         User user = getUser(email);
@@ -36,84 +36,102 @@ public class WorkoutSessionService {
         WorkoutPlan plan = null;
 
         if (req.getPlanDayId() != null) {
-            planDay = planDayRepository.findById(req.getPlanDayId())
+            planDay = dayRepo.findById(req.getPlanDayId())
                     .orElseThrow(() -> new RuntimeException("Ngày tập không tồn tại"));
             plan = planDay.getWorkoutPlan();
 
-            // Kiểm tra đã đăng ký chưa
             if (req.getWeekNumber() != null &&
-                    sessionRepository.existsByUserIdAndPlanDayIdAndWeekNumber(
-                            user.getId(), req.getPlanDayId(), req.getWeekNumber())) {
-                throw new RuntimeException("Bạn đã đăng ký ngày tập này cho tuần " + req.getWeekNumber() + " rồi!");
+                    sessionRepo.existsByUserIdAndPlanDayIdAndWeekNumber(
+                            user.getId(), req.getPlanDayId(), req.getWeekNumber()))
+                throw new RuntimeException("Bạn đã đăng ký ngày tập này trong tuần " + req.getWeekNumber());
+
+            // Kiểm tra số buổi đã đăng ký trong tuần chưa vượt max
+            if (req.getWeekNumber() != null && plan != null) {
+                long enrolled = sessionRepo.countEnrolledInWeek(user.getId(), plan.getId(), req.getWeekNumber());
+                if (enrolled >= plan.getSessionsPerWeek())
+                    throw new RuntimeException("Đã đủ " + plan.getSessionsPerWeek() + " buổi cho tuần này!");
             }
         } else if (req.getPlanId() != null) {
-            plan = planRepository.findById(req.getPlanId())
+            plan = planRepo.findById(req.getPlanId())
                     .orElseThrow(() -> new RuntimeException("Giáo án không tồn tại"));
         }
 
+        // Cập nhật weekStartDate nếu đây là buổi đầu tiên của tuần 1
+        if (plan != null && plan.getWeekStartDate() == null && req.getWeekNumber() == 1) {
+            plan.setWeekStartDate(req.getSessionDate());
+            planRepo.save(plan);
+        }
+
+        boolean isLast = Boolean.TRUE.equals(req.getIsLastSessionOfWeek());
+        // Tự xác định buổi cuối nếu không truyền
+        if (!isLast && plan != null && req.getWeekNumber() != null) {
+            long current = sessionRepo.countEnrolledInWeek(user.getId(), plan.getId(), req.getWeekNumber());
+            isLast = (current + 1) >= plan.getSessionsPerWeek();
+        }
+
         WorkoutSession session = WorkoutSession.builder()
-                .user(user)
-                .workoutPlan(plan)
-                .planDay(planDay)
-                .sessionDate(req.getSessionDate())
-                .scheduledTime(req.getScheduledTime())
+                .user(user).workoutPlan(plan).planDay(planDay)
+                .sessionDate(req.getSessionDate()).scheduledTime(req.getScheduledTime())
                 .weekNumber(req.getWeekNumber())
+                .isLastSessionOfWeek(isLast)
                 .customSessionName(req.getCustomSessionName())
                 .isCustom(req.getPlanDayId() == null)
                 .status(SessionStatus.SCHEDULED)
                 .build();
+        sessionRepo.save(session);
 
-        sessionRepository.save(session);
-
-        // Thông báo
-        String name = planDay != null ? planDay.getDayName()
+        String name    = planDay != null ? planDay.getDayName()
                 : (req.getCustomSessionName() != null ? req.getCustomSessionName() : "Buổi tập");
         String timeStr = req.getScheduledTime() != null ? " lúc " + req.getScheduledTime() : "";
-        notificationService.sendToUser(user.getId(),
-                "📅 Đã đăng ký lịch tập",
-                "\"" + name + "\" vào " + req.getSessionDate() + timeStr,
-                "WORKOUT_REMINDER");
+        notifService.sendToUser(user.getId(), "📅 Đã đăng ký lịch tập",
+                "\"" + name + "\" vào " + req.getSessionDate() + timeStr, "WORKOUT_REMINDER");
 
         return buildResponse(session);
     }
 
-    // ── Xem sessions của tôi ──────────────────────────────────
+    // ── Tiến trình tuần ──────────────────────────────────────
+    public Map<String, Object> getWeekProgress(String email, Long planId, Integer weekNumber) {
+        User user = getUser(email);
+        WorkoutPlan plan = planRepo.findById(planId).orElseThrow();
+        long enrolled  = sessionRepo.countEnrolledInWeek(user.getId(), planId, weekNumber);
+        long completed = sessionRepo.countCompletedInWeek(user.getId(), planId, weekNumber);
+        int  target    = plan.getSessionsPerWeek();
+        Double avgRate = sessionRepo.avgCompletionRateInWeek(user.getId(), planId, weekNumber);
+
+        // Kiểm tra buổi cuối đã checkout chưa
+        boolean lastCheckedOut = sessionRepo.findLastSessionOfWeek(user.getId(), planId, weekNumber)
+                .stream().anyMatch(s -> s.getStatus() == SessionStatus.COMPLETED && s.getCheckoutWeight() != null);
+
+        Map<String, Object> r = new java.util.LinkedHashMap<>();
+        r.put("weekNumber",       weekNumber);
+        r.put("enrolled",         enrolled);
+        r.put("completed",        completed);
+        r.put("target",           target);
+        r.put("isWeekDone",       completed >= target);
+        r.put("canGoNextWeek",    completed >= target && lastCheckedOut);
+        r.put("avgCompletionRate",avgRate);
+        r.put("currentPlanWeek",  plan.getCurrentWeek());
+        r.put("totalWeeks",       plan.getDurationWeeks());
+        r.put("setsAdj",          plan.getSetsAdjustment());
+        r.put("repsAdj",          plan.getRepsAdjustment());
+        return r;
+    }
+
+    // ── Xem sessions ─────────────────────────────────────────
     public List<WorkoutSessionResponse> getMySessions(String email) {
-        return sessionRepository.findByUserIdOrderBySessionDateDesc(getUser(email).getId())
+        return sessionRepo.findByUserIdOrderBySessionDateDesc(getUser(email).getId())
                 .stream().map(this::buildResponse).collect(Collectors.toList());
     }
 
     public List<WorkoutSessionResponse> getWeekSessions(String email) {
-        User user = getUser(email);
-        LocalDate monday = LocalDate.now().with(java.time.DayOfWeek.MONDAY);
-        return sessionRepository.findByUserIdAndSessionDateBetweenOrderBySessionDate(
-                        user.getId(), monday, monday.plusDays(6))
+        User u = getUser(email);
+        LocalDate mon = LocalDate.now().with(java.time.DayOfWeek.MONDAY);
+        return sessionRepo.findByUserIdAndSessionDateBetweenOrderBySessionDate(u.getId(), mon, mon.plusDays(6))
                 .stream().map(this::buildResponse).collect(Collectors.toList());
     }
 
     public WorkoutSessionResponse getSessionById(String email, Long id) {
-        WorkoutSession s = getOwned(email, id);
-        return buildResponse(s);
-    }
-
-    // ── Tiến trình đăng ký theo tuần ─────────────────────────
-    public Map<String, Object> getWeekProgress(String email, Long planId, Integer weekNumber) {
-        User user = getUser(email);
-        long enrolled  = sessionRepository.countEnrolledInWeek(user.getId(), planId, weekNumber);
-        long completed = sessionRepository.countCompletedInWeek(user.getId(), planId, weekNumber);
-
-        // Lấy plan để biết sessionsPerWeek
-        var plan = planRepository.findById(planId).orElseThrow();
-        int target = plan.getSessionsPerWeek();
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("weekNumber",    weekNumber);
-        result.put("enrolled",      enrolled);
-        result.put("completed",     completed);
-        result.put("target",        target);
-        result.put("isWeekDone",    completed >= target);
-        result.put("canGoNextWeek", completed >= target);
-        return result;
+        return buildResponse(getOwned(email, id));
     }
 
     // ── Check-in ─────────────────────────────────────────────
@@ -126,19 +144,31 @@ public class WorkoutSessionService {
             throw new RuntimeException("Buổi tập đã hoàn thành!");
         s.setStatus(SessionStatus.CHECKED_IN);
         s.setCheckInTime(LocalDateTime.now());
-        sessionRepository.save(s);
+        sessionRepo.save(s);
         return buildResponse(s);
     }
 
-    // ── Hoàn thành ───────────────────────────────────────────
+    // ── Check-out (bắt buộc nhập tỉ lệ hoàn thành) ──────────
     @Transactional
-    public WorkoutSessionResponse completeSession(String email, Long id, CheckInRequest req) {
+    public WorkoutSessionResponse checkOut(String email, Long id, CheckOutRequest req) {
         User user = getUser(email);
         WorkoutSession s = getOwned(email, id);
 
+        if (s.getStatus() != SessionStatus.CHECKED_IN)
+            throw new RuntimeException("Hãy check-in trước khi check-out!");
+        if (req.getCompletionRate() == null)
+            throw new RuntimeException("Vui lòng nhập tỉ lệ hoàn thành (0-100%)!");
+        if (req.getCompletionRate() < 0 || req.getCompletionRate() > 100)
+            throw new RuntimeException("Tỉ lệ hoàn thành phải từ 0 đến 100!");
+
+        // Buổi cuối tuần bắt buộc nhập cân nặng
+        if (Boolean.TRUE.equals(s.getIsLastSessionOfWeek()) && req.getCheckoutWeight() == null)
+            throw new RuntimeException("Đây là buổi cuối tuần! Vui lòng nhập cân nặng hiện tại để hệ thống điều chỉnh giáo án.");
+
+        // Lưu exercise logs
         if (req.getExerciseLogs() != null && !req.getExerciseLogs().isEmpty()) {
             List<SessionExerciseLog> logs = req.getExerciseLogs().stream().map(r -> {
-                Exercise ex = exerciseRepository.findById(r.getExerciseId())
+                Exercise ex = exerciseRepo.findById(r.getExerciseId())
                         .orElseThrow(() -> new RuntimeException("Exercise not found"));
                 return SessionExerciseLog.builder()
                         .session(s).exercise(ex)
@@ -147,7 +177,7 @@ public class WorkoutSessionService {
                         .isCompleted(r.getIsCompleted() != null ? r.getIsCompleted() : true)
                         .notes(r.getNotes()).build();
             }).collect(Collectors.toList());
-            logRepository.saveAll(logs);
+            logRepo.saveAll(logs);
 
             int cal = logs.stream()
                     .filter(l -> Boolean.TRUE.equals(l.getIsCompleted()) && l.getExercise().getCaloriesBurned() != null)
@@ -158,23 +188,29 @@ public class WorkoutSessionService {
 
         s.setStatus(SessionStatus.COMPLETED);
         s.setCheckOutTime(LocalDateTime.now());
+        s.setCompletionRate(req.getCompletionRate());
+        s.setNotes(req.getNotes());
+        if (req.getCheckoutWeight()  != null) s.setCheckoutWeight(req.getCheckoutWeight());
+        if (req.getCheckoutBodyFat() != null) s.setCheckoutBodyFat(req.getCheckoutBodyFat());
+
         if (s.getCheckInTime() != null) {
             long mins = java.time.Duration.between(s.getCheckInTime(), s.getCheckOutTime()).toMinutes();
             s.setDurationMinutes((int) mins);
         }
-        sessionRepository.save(s);
+        sessionRepo.save(s);
 
-        // Kiểm tra xem tuần này đã hoàn thành chưa → thông báo
-        if (s.getWorkoutPlan() != null && s.getWeekNumber() != null) {
-            long completed = sessionRepository.countCompletedInWeek(
-                    user.getId(), s.getWorkoutPlan().getId(), s.getWeekNumber());
-            int target = s.getWorkoutPlan().getSessionsPerWeek();
-            if (completed >= target) {
-                notificationService.sendToUser(user.getId(),
-                        "🎉 Hoàn thành tuần " + s.getWeekNumber() + "!",
-                        "Bạn đã hoàn thành tất cả " + target + " buổi tập tuần này! Hãy đăng ký tuần " + (s.getWeekNumber() + 1) + ".",
-                        "SYSTEM");
-            }
+        // Thông báo kết quả
+        String msg = req.getCompletionRate() >= 90 ? "🔥 Xuất sắc! " + req.getCompletionRate() + "% hoàn thành!"
+                : req.getCompletionRate() >= 70 ? "✅ Tốt! " + req.getCompletionRate() + "% hoàn thành."
+                  : "💪 " + req.getCompletionRate() + "% — cố gắng hơn buổi sau nhé!";
+        notifService.sendToUser(user.getId(), "Kết quả buổi tập", msg, "SYSTEM");
+
+        // Nếu là buổi cuối tuần → thông báo cần điều chỉnh giáo án
+        if (Boolean.TRUE.equals(s.getIsLastSessionOfWeek())) {
+            notifService.sendToUser(user.getId(),
+                    "📊 Hoàn thành tuần " + s.getWeekNumber() + "!",
+                    "Dữ liệu đã ghi nhận. Hãy vào trang Giáo án để xem điều chỉnh cho tuần tiếp theo.",
+                    "SYSTEM");
         }
 
         return buildResponse(s);
@@ -183,9 +219,8 @@ public class WorkoutSessionService {
     @Transactional
     public WorkoutSessionResponse skipSession(String email, Long id, String notes) {
         WorkoutSession s = getOwned(email, id);
-        s.setStatus(SessionStatus.SKIPPED);
-        s.setNotes(notes);
-        sessionRepository.save(s);
+        s.setStatus(SessionStatus.SKIPPED); s.setNotes(notes);
+        sessionRepo.save(s);
         return buildResponse(s);
     }
 
@@ -193,14 +228,13 @@ public class WorkoutSessionService {
     public void deleteSession(String email, Long id) {
         WorkoutSession s = getOwned(email, id);
         if (s.getStatus() == SessionStatus.COMPLETED)
-            throw new RuntimeException("Không thể xóa buổi tập đã hoàn thành");
-        sessionRepository.delete(s);
+            throw new RuntimeException("Không thể xóa buổi đã hoàn thành");
+        sessionRepo.delete(s);
     }
 
     // ── Build response ────────────────────────────────────────
     public WorkoutSessionResponse buildResponse(WorkoutSession s) {
-        List<SessionExerciseLog> logs = logRepository.findBySessionId(s.getId());
-        List<ExerciseLogResponse> logResp = logs.stream().map(l ->
+        List<ExerciseLogResponse> logs = logRepo.findBySessionId(s.getId()).stream().map(l ->
                 ExerciseLogResponse.builder()
                         .id(l.getId()).exerciseId(l.getExercise().getId())
                         .exerciseName(l.getExercise().getName())
@@ -209,15 +243,14 @@ public class WorkoutSessionService {
                         .isCompleted(l.getIsCompleted()).notes(l.getNotes()).build()
         ).collect(Collectors.toList());
 
-        // Lấy bài tập mẫu từ planDay để hiển thị khi check-in
-        List<WorkoutPlanExerciseResponse> planExercises = Collections.emptyList();
+        List<WorkoutPlanExerciseResponse> planExs = Collections.emptyList();
         if (s.getPlanDay() != null && s.getPlanDay().getExercises() != null) {
-            planExercises = s.getPlanDay().getExercises().stream().map(pe ->
+            planExs = s.getPlanDay().getExercises().stream().map(pe ->
                     WorkoutPlanExerciseResponse.builder()
                             .id(pe.getId()).exerciseId(pe.getExercise().getId())
                             .exerciseName(pe.getExercise().getName())
-                            .muscleGroup(pe.getExercise().getMuscleGroup() != null ? pe.getExercise().getMuscleGroup().name() : null)
-                            .difficulty(pe.getExercise().getDifficulty() != null ? pe.getExercise().getDifficulty().name() : null)
+                            .muscleGroup(pe.getExercise().getMuscleGroup()!=null ? pe.getExercise().getMuscleGroup().name() : null)
+                            .difficulty(pe.getExercise().getDifficulty()!=null   ? pe.getExercise().getDifficulty().name()  : null)
                             .sets(pe.getSets()).reps(pe.getReps()).durationSeconds(pe.getDurationSeconds())
                             .restSeconds(pe.getRestSeconds()).orderIndex(pe.getOrderIndex())
                             .notes(pe.getNotes()).videoUrl(pe.getExercise().getVideoUrl())
@@ -231,22 +264,25 @@ public class WorkoutSessionService {
                 .status(s.getStatus()).totalCaloriesBurned(s.getTotalCaloriesBurned())
                 .durationMinutes(s.getDurationMinutes()).notes(s.getNotes())
                 .weekNumber(s.getWeekNumber())
-                .planName(s.getWorkoutPlan() != null ? s.getWorkoutPlan().getPlanName() : null)
-                .dayName(s.getPlanDay() != null ? s.getPlanDay().getDayName() : null)
+                .planName(s.getWorkoutPlan()!=null ? s.getWorkoutPlan().getPlanName() : null)
+                .dayName(s.getPlanDay()!=null       ? s.getPlanDay().getDayName()    : null)
                 .customSessionName(s.getCustomSessionName()).isCustom(s.getIsCustom())
-                .exerciseLogs(logResp).planExercises(planExercises)
+                .completionRate(s.getCompletionRate())
+                .isLastSessionOfWeek(s.getIsLastSessionOfWeek())
+                .checkoutWeight(s.getCheckoutWeight()).checkoutBodyFat(s.getCheckoutBodyFat())
+                .exerciseLogs(logs).planExercises(planExs)
                 .build();
     }
 
     private WorkoutSession getOwned(String email, Long id) {
-        User user = getUser(email);
-        WorkoutSession s = sessionRepository.findById(id)
+        User u = getUser(email);
+        WorkoutSession s = sessionRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Session not found"));
-        if (!s.getUser().getId().equals(user.getId())) throw new RuntimeException("Access denied");
+        if (!s.getUser().getId().equals(u.getId())) throw new RuntimeException("Access denied");
         return s;
     }
 
     private User getUser(String email) {
-        return userRepository.findByEmail(email).orElseThrow(() -> new RuntimeException("User not found"));
+        return userRepo.findByEmail(email).orElseThrow(() -> new RuntimeException("User not found"));
     }
 }

@@ -1,7 +1,6 @@
 package com.example.gymmanagement.controller;
 
-import com.example.gymmanagement.dto.request.CheckInRequest;
-import com.example.gymmanagement.dto.request.EnrollSessionRequest;
+import com.example.gymmanagement.dto.request.*;
 import com.example.gymmanagement.dto.response.*;
 import com.example.gymmanagement.service.WorkoutSessionService;
 import lombok.RequiredArgsConstructor;
@@ -20,40 +19,36 @@ public class WorkoutSessionController {
 
     private final WorkoutSessionService sessionService;
 
-    // Đăng ký 1 buổi tập (từ planDay hoặc custom)
     @PostMapping("/enroll")
     public ResponseEntity<ApiResponse<WorkoutSessionResponse>> enroll(
             @AuthenticationPrincipal UserDetails ud,
-            @RequestBody EnrollSessionRequest request) {
+            @RequestBody EnrollSessionRequest req) {
         return ResponseEntity.ok(ApiResponse.success(
-                sessionService.enrollSession(ud.getUsername(), request),
-                "Đã đăng ký lịch tập!"));
+                sessionService.enrollSession(ud.getUsername(), req), "Đã đăng ký lịch tập!"));
     }
 
-    // Tiến trình tuần hiện tại của plan
     @GetMapping("/week-progress")
     public ResponseEntity<ApiResponse<Map<String, Object>>> weekProgress(
             @AuthenticationPrincipal UserDetails ud,
-            @RequestParam Long planId,
-            @RequestParam Integer weekNumber) {
+            @RequestParam Long planId, @RequestParam Integer weekNumber) {
         return ResponseEntity.ok(ApiResponse.success(
                 sessionService.getWeekProgress(ud.getUsername(), planId, weekNumber)));
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<WorkoutSessionResponse>>> getMySessions(
+    public ResponseEntity<ApiResponse<List<WorkoutSessionResponse>>> getAll(
             @AuthenticationPrincipal UserDetails ud) {
         return ResponseEntity.ok(ApiResponse.success(sessionService.getMySessions(ud.getUsername())));
     }
 
     @GetMapping("/this-week")
-    public ResponseEntity<ApiResponse<List<WorkoutSessionResponse>>> getWeekSessions(
+    public ResponseEntity<ApiResponse<List<WorkoutSessionResponse>>> getWeek(
             @AuthenticationPrincipal UserDetails ud) {
         return ResponseEntity.ok(ApiResponse.success(sessionService.getWeekSessions(ud.getUsername())));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<WorkoutSessionResponse>> getSession(
+    public ResponseEntity<ApiResponse<WorkoutSessionResponse>> getOne(
             @AuthenticationPrincipal UserDetails ud, @PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success(sessionService.getSessionById(ud.getUsername(), id)));
     }
@@ -65,12 +60,13 @@ public class WorkoutSessionController {
                 sessionService.checkIn(ud.getUsername(), id), "Check-in thành công! 💪"));
     }
 
-    @PostMapping("/{id}/complete")
-    public ResponseEntity<ApiResponse<WorkoutSessionResponse>> complete(
+    // Check-out bắt buộc nhập tỉ lệ hoàn thành + tiến độ (cuối tuần)
+    @PostMapping("/{id}/check-out")
+    public ResponseEntity<ApiResponse<WorkoutSessionResponse>> checkOut(
             @AuthenticationPrincipal UserDetails ud, @PathVariable Long id,
-            @RequestBody CheckInRequest request) {
+            @RequestBody CheckOutRequest req) {
         return ResponseEntity.ok(ApiResponse.success(
-                sessionService.completeSession(ud.getUsername(), id, request), "Hoàn thành! 🎉"));
+                sessionService.checkOut(ud.getUsername(), id, req), "Check-out thành công! 🎉"));
     }
 
     @PostMapping("/{id}/skip")
@@ -78,7 +74,8 @@ public class WorkoutSessionController {
             @AuthenticationPrincipal UserDetails ud, @PathVariable Long id,
             @RequestBody(required = false) Map<String, String> body) {
         return ResponseEntity.ok(ApiResponse.success(
-                sessionService.skipSession(ud.getUsername(), id, body != null ? body.get("notes") : null)));
+                sessionService.skipSession(ud.getUsername(), id,
+                        body != null ? body.get("notes") : null)));
     }
 
     @DeleteMapping("/{id}")

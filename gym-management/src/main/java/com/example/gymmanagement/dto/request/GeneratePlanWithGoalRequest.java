@@ -6,7 +6,7 @@ import lombok.*;
 
 @Data @NoArgsConstructor @AllArgsConstructor
 public class GeneratePlanWithGoalRequest {
-    private Goal goal;               // bắt buộc
-    private FitnessLevel fitnessLevel; // tuỳ chọn (lấy từ profile nếu null)
-    private Integer daysPerWeek;       // tuỳ chọn (lấy từ profile nếu null)
+    private Goal         goal;             // bắt buộc
+    private FitnessLevel fitnessLevel;     // tuỳ chọn, lấy từ profile nếu null
+    private Integer      daysPerWeek;      // min2-max6, lấy từ profile nếu null
 }

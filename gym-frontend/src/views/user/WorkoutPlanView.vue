@@ -3,12 +3,11 @@
     <div class="page-header">
       <h2>GIÁO ÁN TẬP</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <el-button @click="allPlansDialog=true" plain>📋 Tất cả giáo án</el-button>
-        <el-button @click="goalDialog=true" type="primary">✨ Tạo giáo án </el-button>
+        <el-button v-if="plan" @click="allPlansDialog=true" plain>📋 Tất cả giáo án</el-button>
+        <el-button @click="goalDialog=true" type="primary">✨ {{ plan ? 'Tạo lại' : 'Tạo giáo án' }}</el-button>
       </div>
     </div>
 
-    <!-- Empty -->
     <div v-if="!plan && !loading" class="empty-plan">
       <div style="font-size:4rem;margin-bottom:16px">🤖</div>
       <h3 class="display" style="font-size:1.8rem;color:var(--c-text);margin-bottom:8px">CHƯA CÓ GIÁO ÁN</h3>
@@ -23,7 +22,6 @@
     </div>
 
     <template v-if="plan && !loading">
-      <!-- Plan header -->
       <el-card style="margin-bottom:24px;border-left:4px solid var(--c-accent)">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
           <div>
@@ -43,15 +41,34 @@
         </div>
       </el-card>
 
-      <!-- Days grid -->
+      <el-alert v-if="justCreated" type="success" closable @close="justCreated=false" style="margin-bottom:20px">
+        🎉 Giáo án đã tạo! Hãy chọn ngày & giờ tập cho từng buổi bên dưới.
+      </el-alert>
+
       <div class="days-grid">
-        <el-card v-for="day in plan.planDays" :key="day.id" class="day-card">
+        <el-card v-for="(day, index) in plan.planDays" :key="day.id" class="day-card">
           <template #header>
             <div style="display:flex;justify-content:space-between;align-items:center">
-              <span class="display accent" style="font-size:1.1rem">{{ day.dayName }}</span>
+              <span class="display accent" style="font-size:1.1rem">Buổi {{ index + 1 }}</span>
               <span style="font-size:0.75rem;color:var(--c-text3)">{{ day.exercises?.length || 0 }} bài</span>
             </div>
           </template>
+
+          <div class="schedule-section">
+            <div v-if="!isScheduled(day)" class="no-schedule">
+              <el-button plain size="small" @click="openScheduleDialog(day, index + 1)">
+                📅 Chọn ngày & giờ tập
+              </el-button>
+            </div>
+            <div v-else class="scheduled">
+              <span class="date-display">
+                📅 {{ fmtDate(getScheduledDate(day)) }}
+                <span v-if="getScheduledTime(day)">• {{ getScheduledTime(day) }}</span>
+              </span>
+              <el-button type="primary" link size="small" @click="openScheduleDialog(day, index + 1)">Sửa</el-button>
+            </div>
+          </div>
+
           <div class="exercise-list">
             <div v-for="ex in day.exercises" :key="ex.id" class="ex-row" @click="openExDetail(ex)">
               <div class="ex-info">
@@ -73,7 +90,6 @@
       </div>
     </template>
 
-    <!-- ── Dialog chọn mục tiêu AI ─────────────────────────── -->
     <el-dialog v-model="goalDialog" title="TẠO GIÁO ÁN " width="520px" align-center>
       <div style="margin-bottom:20px">
         <div style="font-weight:700;color:var(--c-text);margin-bottom:12px">🎯 Chọn mục tiêu chính</div>
@@ -111,7 +127,6 @@
         </div>
       </div>
 
-      <!-- Info box -->
       <div class="info-box" v-if="genForm.goal">
         <div style="font-weight:700;margin-bottom:6px;color:var(--c-accent)">
           {{ goals.find(g=>g.value===genForm.goal)?.icon }} {{ goals.find(g=>g.value===genForm.goal)?.label }}
@@ -129,7 +144,6 @@
       </template>
     </el-dialog>
 
-    <!-- ── Dialog tất cả giáo án ──────────────────────────── -->
     <el-dialog v-model="allPlansDialog" title="TẤT CẢ GIÁO ÁN" width="600px" align-center>
       <div v-if="!allPlans.length" class="empty-state">Chưa có giáo án nào</div>
       <div v-else class="plans-list">
@@ -152,7 +166,6 @@
       </template>
     </el-dialog>
 
-    <!-- ── Dialog chi tiết bài tập ─────────────────────────── -->
     <el-dialog v-model="exDetailDialog" :title="selEx?.exerciseName" width="540px" align-center v-if="selEx">
       <div v-if="selEx.videoUrl" class="video-wrap">
         <iframe :src="ytEmbed(selEx.videoUrl)" frameborder="0" allowfullscreen
@@ -172,7 +185,7 @@
         </el-descriptions-item>
         <el-descriptions-item label="Nghỉ giữa set">{{ selEx.restSeconds || '--' }}s</el-descriptions-item>
         <el-descriptions-item label="Calories/set">{{ selEx.caloriesBurned || '--' }} kcal</el-descriptions-item>
-        <el-descriptions-item v-if="selEx.notes" label="Ghi chú" :span="2">
+        <el-descriptions-item label="Ghi chú" :span="2" v-if="selEx.notes">
           {{ selEx.notes }}
         </el-descriptions-item>
       </el-descriptions>
@@ -184,24 +197,71 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="scheduleDialog" title="CHỌN NGÀY & GIỜ TẬP" width="420px" align-center>
+      <el-form :model="schedForm" label-position="top">
+        <el-form-item label="Buổi">
+          <strong>Buổi {{ selectedDayNumber }}</strong>
+        </el-form-item>
+        <div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <el-form-item label="Ngày tập" style="margin-bottom:0">
+            <el-date-picker
+                v-model="schedForm.sessionDate"
+                type="date"
+                format="DD/MM/YYYY"
+                value-format="YYYY-MM-DD"
+                style="width:100%"
+                :disabled-date="d => d < new Date().setHours(0,0,0,0)"
+            />
+          </el-form-item>
+          <el-form-item label="Giờ bắt đầu" style="margin-bottom:0">
+            <el-time-picker
+                v-model="schedForm.scheduledTime"
+                format="HH:mm"
+                value-format="HH:mm:ss"
+                placeholder="06:00"
+                style="width:100%"
+            />
+          </el-form-item>
+        </div>
+      </el-form>
+      <template #footer>
+        <el-button @click="scheduleDialog=false">Hủy</el-button>
+        <el-button type="primary" @click="saveSchedule" :loading="saving">Lưu lịch</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { planAPI } from '@/api'
+import { planAPI, sessionAPI } from '@/api'
 import { ElMessage } from 'element-plus'
+import dayjs from 'dayjs'
 
-const plan          = ref(null)
-const allPlans      = ref([])
-const loading       = ref(true)
-const generating    = ref(false)
-const goalDialog    = ref(false)
-const allPlansDialog= ref(false)
-const exDetailDialog= ref(false)
-const selEx         = ref(null)
+const plan           = ref(null)
+const allPlans       = ref([])
+const loading        = ref(true)
+const generating     = ref(false)
+const goalDialog     = ref(false)
+const allPlansDialog = ref(false)
+const exDetailDialog = ref(false)
+const scheduleDialog = ref(false)
+const saving         = ref(false)
+
+const selEx              = ref(null)
+const selectedDay        = ref(null)
+const selectedDayNumber  = ref(null)
+const justCreated        = ref(false)
 
 const genForm = reactive({ goal: '', fitnessLevel: null, daysPerWeek: null })
+
+const schedForm = reactive({
+  planDayId: null,
+  sessionDate: '',
+  scheduledTime: '06:00:00',
+  weekNumber: 1
+})
 
 const goals = [
   {
@@ -255,10 +315,50 @@ async function generateWithGoal() {
     const r = await planAPI.generateWithGoal(payload)
     plan.value = r.data
     goalDialog.value = false
+    justCreated.value = true
     ElMessage.success('Giáo án đã được tạo theo mục tiêu ' + genForm.goal + '! 🎉')
     genForm.goal = ''; genForm.fitnessLevel = null; genForm.daysPerWeek = null
     load()
   } catch {} finally { generating.value = false }
+}
+
+function openScheduleDialog(day, dayNumber) {
+  selectedDay.value = day
+  selectedDayNumber.value = dayNumber
+  schedForm.planDayId = day.id
+  schedForm.sessionDate = day.scheduledDate || dayjs().format('YYYY-MM-DD')
+  schedForm.scheduledTime = day.scheduledTime || '06:00:00'
+  scheduleDialog.value = true
+}
+
+async function saveSchedule() {
+  if (!schedForm.sessionDate) {
+    ElMessage.warning('Vui lòng chọn ngày')
+    return
+  }
+  saving.value = true
+  try {
+    await sessionAPI.enroll(schedForm)
+    ElMessage.success('✅ Đã lưu lịch tập thành công!')
+    scheduleDialog.value = false
+    await load()
+  } catch (err) {
+    console.error(err)
+    ElMessage.error(err.response?.data?.message || 'Lưu lịch thất bại')
+  } finally {
+    saving.value = false
+  }
+}
+
+function isScheduled(day) {
+  return !!(day.scheduledDate || day.scheduledTime)
+}
+function getScheduledDate(day) { return day.scheduledDate }
+function getScheduledTime(day) {
+  return day.scheduledTime ? day.scheduledTime.substring(0, 5) : ''
+}
+function fmtDate(d) {
+  return d ? dayjs(d).format('DD/MM/YYYY') : ''
 }
 
 function openExDetail(ex) { selEx.value = ex; exDetailDialog.value = true }
@@ -268,6 +368,7 @@ function ytEmbed(url) {
   return m ? `https://www.youtube.com/embed/${m[1]}` : url
 }
 
+// Label functions
 function goalLabel(g)   { return { WEIGHT_LOSS:'🔥 Giảm cân', MUSCLE_GAIN:'💪 Tăng cơ', ENDURANCE:'🏃 Sức bền', FLEXIBILITY:'🤸 Linh hoạt', MAINTENANCE:'⚖️ Duy trì' }[g]||g }
 function levelLabel(l)  { return { BEGINNER:'Mới bắt đầu', INTERMEDIATE:'Trung bình', ADVANCED:'Nâng cao' }[l]||l }
 function muscleLabel(m) { return { CHEST:'Ngực', BACK:'Lưng', SHOULDERS:'Vai', ARMS:'Tay', LEGS:'Chân', CORE:'Cơ lõi', CARDIO:'Cardio', FULL_BODY:'Toàn thân' }[m]||m }
@@ -302,8 +403,13 @@ onMounted(load)
   margin-top:12px;
 }
 
+/* Schedule */
+.schedule-section { margin: 12px 0; padding: 10px 12px; background: var(--c-card2); border-radius: var(--radius); }
+.scheduled { display: flex; align-items: center; gap: 12px; color: var(--c-accent); font-weight: 500; }
+.date-display { font-size: 0.9rem; }
+
 /* Plan days */
-.days-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
+.days-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; }
 .exercise-list { display:flex; flex-direction:column; gap:6px; }
 .ex-row {
   display:flex; align-items:center; gap:10px;

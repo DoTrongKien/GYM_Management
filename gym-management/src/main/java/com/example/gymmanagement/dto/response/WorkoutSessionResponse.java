@@ -9,21 +9,24 @@ import java.util.List;
 
 @Data @NoArgsConstructor @AllArgsConstructor @Builder
 public class WorkoutSessionResponse {
-    private Long id;
-    private LocalDate sessionDate;
-    private LocalTime scheduledTime;
+    private Long   id;
+    private LocalDate     sessionDate;
+    private LocalTime     scheduledTime;
     private LocalDateTime checkInTime;
     private LocalDateTime checkOutTime;
     private SessionStatus status;
     private Integer totalCaloriesBurned;
     private Integer durationMinutes;
-    private String notes;
+    private String  notes;
     private Integer weekNumber;
-    private String planName;
-    private String dayName;
-    private String customSessionName;
+    private String  planName;
+    private String  dayName;
+    private String  customSessionName;
     private Boolean isCustom;
-    private List<ExerciseLogResponse> exerciseLogs;
-    // Các bài tập mẫu từ planDay (để hiển thị khi check-in)
+    private Integer completionRate;
+    private Boolean isLastSessionOfWeek;
+    private Double  checkoutWeight;
+    private Double  checkoutBodyFat;
+    private List<ExerciseLogResponse>         exerciseLogs;
     private List<WorkoutPlanExerciseResponse> planExercises;
 }

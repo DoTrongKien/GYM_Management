@@ -1,10 +1,9 @@
 package com.example.gymmanagement.controller;
 
-import com.example.gymmanagement.dto.request.GeneratePlanWithGoalRequest;
-import com.example.gymmanagement.dto.request.WorkoutPlanRequest;
+import com.example.gymmanagement.dto.request.*;
 import com.example.gymmanagement.dto.response.*;
-import com.example.gymmanagement.enums.FitnessLevel;
 import com.example.gymmanagement.enums.Goal;
+import com.example.gymmanagement.enums.FitnessLevel;
 import com.example.gymmanagement.service.WorkoutPlanService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +12,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/workout-plans")
@@ -21,61 +21,62 @@ public class WorkoutPlanController {
 
     private final WorkoutPlanService planService;
 
-    // Tạo giáo án AI dựa hoàn toàn theo hồ sơ
-    @PostMapping("/generate")
-    public ResponseEntity<ApiResponse<WorkoutPlanResponse>> generateAIPlan(
-            @AuthenticationPrincipal UserDetails ud) {
-        return ResponseEntity.ok(ApiResponse.success(
-                planService.generateAIPlan(ud.getUsername()),
-                "Giáo án AI đã được tạo theo hồ sơ của bạn!"));
-    }
-
-    // Tạo giáo án AI với mục tiêu tuỳ chọn
+    // Tạo giáo án AI theo hồ sơ + mục tiêu + số ngày
     @PostMapping("/generate-with-goal")
     public ResponseEntity<ApiResponse<WorkoutPlanResponse>> generateWithGoal(
             @AuthenticationPrincipal UserDetails ud,
-            @RequestBody GeneratePlanWithGoalRequest request) {
+            @RequestBody GeneratePlanWithGoalRequest req) {
         return ResponseEntity.ok(ApiResponse.success(
                 planService.generateAIPlanWithGoal(
-                        ud.getUsername(),
-                        request.getGoal(),
-                        request.getFitnessLevel(),
-                        request.getDaysPerWeek()
-                ),
-                "Giáo án đã được tạo theo mục tiêu: " + request.getGoal()));
+                        ud.getUsername(), req.getGoal(),
+                        req.getFitnessLevel(), req.getDaysPerWeek()),
+                "Giáo án AI đã được tạo!"));
     }
 
-    @PostMapping
-    public ResponseEntity<ApiResponse<WorkoutPlanResponse>> createCustomPlan(
+    // Điều chỉnh giáo án sau khi hoàn thành 1 tuần
+    @PostMapping("/{id}/adjust-week")
+    public ResponseEntity<ApiResponse<WorkoutPlanResponse>> adjustWeek(
             @AuthenticationPrincipal UserDetails ud,
-            @RequestBody WorkoutPlanRequest request) {
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body) {
+        Double weight  = body.get("newWeight")  != null ? Double.parseDouble(body.get("newWeight").toString())  : null;
+        Double bodyFat = body.get("newBodyFat") != null ? Double.parseDouble(body.get("newBodyFat").toString()) : null;
         return ResponseEntity.ok(ApiResponse.success(
-                planService.createCustomPlan(ud.getUsername(), request),
-                "Giáo án đã được tạo!"));
+                planService.adjustPlanAfterWeek(id, ud.getUsername(), weight, bodyFat),
+                "Giáo án đã được điều chỉnh cho tuần tiếp theo!"));
     }
 
     @GetMapping("/active")
-    public ResponseEntity<ApiResponse<WorkoutPlanResponse>> getActivePlan(
+    public ResponseEntity<ApiResponse<WorkoutPlanResponse>> getActive(
             @AuthenticationPrincipal UserDetails ud) {
         return ResponseEntity.ok(ApiResponse.success(planService.getActivePlan(ud.getUsername())));
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<WorkoutPlanResponse>>> getAllPlans(
+    public ResponseEntity<ApiResponse<List<WorkoutPlanResponse>>> getAll(
             @AuthenticationPrincipal UserDetails ud) {
         return ResponseEntity.ok(ApiResponse.success(planService.getAllPlans(ud.getUsername())));
     }
 
-    // Danh sách Goals để FE hiển thị cho user chọn
+    // Gợi ý ngày tập theo mục tiêu
+    @GetMapping("/suggest-days")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> suggestDays(
+            @RequestParam String goal,
+            @RequestParam int sessions) {
+        Goal g = Goal.valueOf(goal);
+        List<String> days = planService.suggestDays(g, sessions);
+        return ResponseEntity.ok(ApiResponse.success(Map.of("suggestedDays", days)));
+    }
+
+    // Goals list cho FE
     @GetMapping("/goals")
-    public ResponseEntity<ApiResponse<List<java.util.Map<String, String>>>> getGoals() {
-        List<java.util.Map<String, String>> goals = List.of(
-                java.util.Map.of("value","MUSCLE_GAIN",  "label","💪 Tăng cơ / Tăng sức mạnh"),
-                java.util.Map.of("value","WEIGHT_LOSS",  "label","🔥 Giảm cân / Đốt mỡ"),
-                java.util.Map.of("value","ENDURANCE",    "label","🏃 Tăng sức bền"),
-                java.util.Map.of("value","FLEXIBILITY",  "label","🤸 Tăng độ linh hoạt"),
-                java.util.Map.of("value","MAINTENANCE",  "label","⚖️ Duy trì thể hình")
-        );
-        return ResponseEntity.ok(ApiResponse.success(goals));
+    public ResponseEntity<ApiResponse<List<Map<String, String>>>> getGoals() {
+        return ResponseEntity.ok(ApiResponse.success(List.of(
+                Map.of("value","MUSCLE_GAIN", "label","💪 Tăng cơ / Sức mạnh", "minDays","4"),
+                Map.of("value","WEIGHT_LOSS", "label","🔥 Giảm cân / Đốt mỡ",  "minDays","4"),
+                Map.of("value","ENDURANCE",   "label","🏃 Tăng sức bền",        "minDays","3"),
+                Map.of("value","FLEXIBILITY", "label","🤸 Tăng linh hoạt",      "minDays","2"),
+                Map.of("value","MAINTENANCE", "label","⚖️ Duy trì thể hình",    "minDays","2")
+        )));
     }
 }

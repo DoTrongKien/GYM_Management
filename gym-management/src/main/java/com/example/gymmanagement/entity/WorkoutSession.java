@@ -20,20 +20,16 @@ public class WorkoutSession {
     @JoinColumn(name = "user_id")
     private User user;
 
-    // Template reference (null nếu custom session)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "workout_plan_id")
     private WorkoutPlan workoutPlan;
 
-    // Ngày mẫu user chọn đăng ký (null nếu custom)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "plan_day_id")
     private WorkoutPlanDay planDay;
 
-    // Ngày & giờ user tự chọn
-    private LocalDate sessionDate;
-    private LocalTime scheduledTime;
-
+    private LocalDate  sessionDate;
+    private LocalTime  scheduledTime;
     private LocalDateTime checkInTime;
     private LocalDateTime checkOutTime;
 
@@ -43,14 +39,19 @@ public class WorkoutSession {
 
     private Integer totalCaloriesBurned;
     private Integer durationMinutes;
-    private String notes;
-
-    // Tuần tập (1,2,3,...) - user tự chọn khi đăng ký
+    private String  notes;
     private Integer weekNumber;
 
-    // Session tự do không theo plan
-    private String customSessionName;
+    // Tỉ lệ hoàn thành (0-100) - nhập lúc checkout
+    private Integer completionRate;
 
+    // Cuối tuần: tiến độ cơ thể
+    private Double  checkoutWeight;
+    private Double  checkoutBodyFat;
+    private Boolean isLastSessionOfWeek;
+
+    // Custom
+    private String  customSessionName;
     @Builder.Default
     private Boolean isCustom = false;
 
@@ -59,7 +60,7 @@ public class WorkoutSession {
 
     @PrePersist
     protected void prePersist() {
-        if (status == null)   status   = SessionStatus.SCHEDULED;
+        if (status   == null) status   = SessionStatus.SCHEDULED;
         if (isCustom == null) isCustom = false;
     }
 }

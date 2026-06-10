@@ -60,8 +60,9 @@ export const sessionAPI = {
     getWeek:      ()           => api.get('/sessions/this-week'),
     getById:      (id)         => api.get(`/sessions/${id}`),
     checkIn:    (id)         => api.post(`/sessions/${id}/check-in`),
+    enroll:       (data)       => api.post('/sessions/enroll', data),
     schedule:   (data)       => api.post('/sessions/schedule', data),
-    complete:     (id, data)   => api.post(`/sessions/${id}/complete`, data),
+    complete:     (id, data)   => api.post(`/sessions/${id}/check-out`, data),
     skip:         (id, notes)  => api.post(`/sessions/${id}/skip`, { notes }),
     delete:       (id)         => api.delete(`/sessions/${id}`)
 }
