@@ -4,10 +4,13 @@ import com.example.gymmanagement.dto.request.UserProfileRequest;
 import com.example.gymmanagement.dto.response.UserProfileResponse;
 import com.example.gymmanagement.entity.User;
 import com.example.gymmanagement.entity.UserProfile;
+import com.example.gymmanagement.enums.ProgressSource;
 import com.example.gymmanagement.repository.UserProfileRepository;
 import com.example.gymmanagement.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDate;
 
 @Service
 @RequiredArgsConstructor
@@ -15,6 +18,7 @@ public class UserProfileService {
 
     private final UserProfileRepository profileRepository;
     private final UserRepository userRepository;
+    private final ProgressService progressService;
 
     public UserProfileResponse saveOrUpdate(String email, UserProfileRequest request) {
         User user = userRepository.findByEmail(email)
@@ -25,6 +29,9 @@ public class UserProfileService {
 
         profile.setHeight(request.getHeight());
         profile.setWeight(request.getWeight());
+        profile.setBodyFatPercentage(
+                request.getBodyFatPercentage()
+        );
         profile.setAge(request.getAge());
         profile.setGender(request.getGender());
         profile.setGoal(request.getGoal());
@@ -40,7 +47,16 @@ public class UserProfileService {
             profile.setBmi(Math.round(bmi * 10.0) / 10.0);
         }
 
-        profileRepository.save(profile);
+        profile = profileRepository.save(profile);
+
+        progressService.autoSaveProgress(
+                user,
+                profile.getWeight(),
+                profile.getBodyFatPercentage(),
+                "Khởi tạo hồ sơ",
+                ProgressSource.PROFILE,
+                LocalDate.now() //mới thêm
+        );
         return buildResponse(profile, user);
     }
 
@@ -74,6 +90,9 @@ public class UserProfileService {
                 .phone(user.getPhone())
                 .height(profile.getHeight())
                 .weight(profile.getWeight())
+                .bodyFatPercentage(
+                        profile.getBodyFatPercentage()
+                )
                 .age(profile.getAge())
                 .gender(profile.getGender())
                 .bmi(profile.getBmi())
