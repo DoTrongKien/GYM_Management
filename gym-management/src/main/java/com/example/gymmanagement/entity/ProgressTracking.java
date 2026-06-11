@@ -1,5 +1,6 @@
 package com.example.gymmanagement.entity;
 
+import com.example.gymmanagement.enums.ProgressSource;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDate;
@@ -32,5 +33,7 @@ public class ProgressTracking {
 
     private LocalDate recordedDate;
     private LocalDateTime recordedAt = LocalDateTime.now();
+    @Enumerated(EnumType.STRING)
+    private ProgressSource source;
     private String notes;
 }

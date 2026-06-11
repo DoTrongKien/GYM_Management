@@ -3,6 +3,7 @@ package com.example.gymmanagement.service;
 import com.example.gymmanagement.dto.request.*;
 import com.example.gymmanagement.dto.response.*;
 import com.example.gymmanagement.entity.*;
+import com.example.gymmanagement.enums.ProgressSource;
 import com.example.gymmanagement.enums.SessionStatus;
 import com.example.gymmanagement.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ public class WorkoutSessionService {
     private final WorkoutPlanDayRepository  dayRepo;
     private final NotificationService       notifService;
     private final UserProfileRepository     profileRepo;
+    private final ProgressService progressService;
 
     // ── Đăng ký buổi tập ─────────────────────────────────────
     @Transactional
@@ -198,6 +200,36 @@ public class WorkoutSessionService {
             s.setDurationMinutes((int) mins);
         }
         sessionRepo.save(s);
+
+        if (Boolean.TRUE.equals(s.getIsLastSessionOfWeek())
+                && req.getCheckoutWeight() != null) {
+
+            progressService.autoSaveProgress(
+                    user,
+                    req.getCheckoutWeight(),
+                    req.getCheckoutBodyFat(),
+                    "Tự động ghi nhận sau tuần "
+                            + s.getWeekNumber(),
+                    ProgressSource.WEEKLY_CHECKOUT,
+                    s.getSessionDate() //mới thêm
+            );
+
+            profileRepo.findByUserId(user.getId())
+                    .ifPresent(profile -> {
+
+                        profile.setWeight(
+                                req.getCheckoutWeight()
+                        );
+
+                        if (req.getCheckoutBodyFat() != null) {
+                            profile.setBodyFatPercentage(
+                                    req.getCheckoutBodyFat()
+                            );
+                        }
+
+                        profileRepo.save(profile);
+                    });
+        }
 
         // Thông báo kết quả
         String msg = req.getCompletionRate() >= 90 ? "🔥 Xuất sắc! " + req.getCompletionRate() + "% hoàn thành!"

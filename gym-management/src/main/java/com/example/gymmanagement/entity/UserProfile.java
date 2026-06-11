@@ -24,6 +24,8 @@ public class UserProfile {
     private String gender;
     private Double bmi;
 
+    private Double bodyFatPercentage;
+
     @Enumerated(EnumType.STRING)
     private Goal goal;
 

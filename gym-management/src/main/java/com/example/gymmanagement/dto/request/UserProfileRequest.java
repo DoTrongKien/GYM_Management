@@ -13,4 +13,6 @@ public class UserProfileRequest {
     private Integer availableDaysPerWeek;
     private Integer preferredSessionDuration;
     private String medicalConditions;
+
+    private Double bodyFatPercentage;
 }

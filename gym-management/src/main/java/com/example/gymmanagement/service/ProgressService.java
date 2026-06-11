@@ -12,6 +12,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import com.example.gymmanagement.enums.ProgressSource;
+import java.time.LocalDate;
+
 @Service
 @RequiredArgsConstructor
 public class ProgressService {
@@ -42,6 +45,7 @@ public class ProgressService {
                 .height(request.getHeight())
                 .bmi(bmi > 0 ? bmi : null)
                 .bodyFatPercentage(request.getBodyFatPercentage())
+                .source(ProgressSource.MANUAL)
                 .muscleMassKg(request.getMuscleMassKg())
                 .chestCm(request.getChestCm())
                 .waistCm(request.getWaistCm())
@@ -102,6 +106,23 @@ public class ProgressService {
         if (request.getChestCm() != null) pt.setChestCm(request.getChestCm());
         if (request.getNotes() != null) pt.setNotes(request.getNotes());
         progressRepository.save(pt);
+
+        profileRepository.findByUserId(user.getId())
+                .ifPresent(profile -> {
+
+                    if (request.getWeight() != null) {
+                        profile.setWeight(request.getWeight());
+                    }
+
+                    if (request.getBodyFatPercentage() != null) {
+                        profile.setBodyFatPercentage(
+                                request.getBodyFatPercentage()
+                        );
+                    }
+
+                    profileRepository.save(profile);
+                });
+
         return buildResponse(pt, null);
     }
 
@@ -121,8 +142,57 @@ public class ProgressService {
                 .recordedDate(pt.getRecordedDate())
                 .notes(pt.getNotes())
                 .weightChange(weightChange)
+                .source(pt.getSource())
                 .build();
     }
+
+    public void autoSaveProgress(
+            User user,
+            Double weight,
+            Double bodyFat,
+            String note,
+            ProgressSource source,
+            LocalDate recordedDate) {  //mới thêm  LocalDate recordedDate
+
+        UserProfile profile =
+                profileRepository.findByUserId(user.getId())
+                        .orElse(null);
+
+        Double height = null;
+
+        if(profile != null){
+            height = profile.getHeight();
+        }
+
+        Double bmi = null;
+
+        if(weight != null &&
+                height != null &&
+                height > 0){
+
+            double h = height / 100.0;
+
+            bmi = Math.round(
+                    weight / (h * h) * 10.0
+            ) / 10.0;
+        }
+
+        ProgressTracking progress =
+                ProgressTracking.builder()
+                        .user(user)
+                        .weight(weight)
+                        .height(height)
+                        .bodyFatPercentage(bodyFat)
+                        .bmi(bmi)
+                        // đổi từ .recordedDate(LocalDate.now())  thành đoạn bên dưới để lấy thời gian theo buổi cuối ko phỉa thời gian thực
+                        .recordedDate(recordedDate)
+                        .source(source)
+                        .notes(note)
+                        .build();
+
+        progressRepository.save(progress);
+    }
+
 
     private User getUser(String email) {
         return userRepository.findByEmail(email).orElseThrow(() -> new RuntimeException("User not found"));
