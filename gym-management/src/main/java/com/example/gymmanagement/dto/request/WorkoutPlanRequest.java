@@ -10,4 +10,5 @@ public class WorkoutPlanRequest {
     private FitnessLevel targetLevel;
     private Integer durationWeeks;
     private Integer sessionsPerWeek;
+    private Boolean isActive = true;
 }
