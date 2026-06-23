@@ -143,6 +143,9 @@ export const adminAPI = {
     getRevenue:         ()           => api.get('/admin/stats/revenue'),
     getPlans:           ()           => api.get('/admin/workout-plans'),
     getUserPlans:       (uid)        => api.get(`/admin/workout-plans/user/${uid}`),
+    createPlan:         (data)       => api.post('/admin/workout-plans', data),
+    updatePlan:         (id, data)   => api.put(`/admin/workout-plans/${id}`, data),
+    deletePlan:         (id)         => api.delete(`/admin/workout-plans/${id}`),
     broadcast:          (data)       => api.post('/admin/notifications/broadcast', data),
     sendToUser:         (uid, data)  => api.post(`/admin/notifications/user/${uid}`, data)
 }

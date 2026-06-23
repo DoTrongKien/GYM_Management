@@ -169,25 +169,7 @@ public class AdminController {
     }
 
     // ─── Workout Plan Management ──────────────────────────────
-    @GetMapping("/workout-plans")
-    public ResponseEntity<ApiResponse<List<WorkoutPlanResponse>>> getAllPlans() {
-        List<WorkoutPlanResponse> plans = workoutPlanRepository.findByIsActiveTrueOrderByCreatedAtDesc()
-                .stream().map(p -> {
-                    p.setPlanDays(workoutPlanDayRepository.findByWorkoutPlanIdOrderByDayOfWeek(p.getId()));
-                    return workoutPlanService.buildPlanResponse(p);
-                }).collect(Collectors.toList());
-        return ResponseEntity.ok(ApiResponse.success(plans));
-    }
 
-    @GetMapping("/workout-plans/user/{userId}")
-    public ResponseEntity<ApiResponse<List<WorkoutPlanResponse>>> getPlansByUser(@PathVariable Long userId) {
-        List<WorkoutPlanResponse> plans = workoutPlanRepository.findByUserIdOrderByCreatedAtDesc(userId)
-                .stream().map(p -> {
-                    p.setPlanDays(workoutPlanDayRepository.findByWorkoutPlanIdOrderByDayOfWeek(p.getId()));
-                    return workoutPlanService.buildPlanResponse(p);
-                }).collect(Collectors.toList());
-        return ResponseEntity.ok(ApiResponse.success(plans));
-    }
 
     // ─── Notifications / Broadcast ────────────────────────────
     @PostMapping("/notifications/broadcast")
