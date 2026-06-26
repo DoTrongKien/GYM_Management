@@ -52,8 +52,10 @@ export const planAPI = {
     getActive:    ()     => api.get('/workout-plans/active'),
     getAll:       ()     => api.get('/workout-plans'),
     createCustom: (data) => api.post('/workout-plans', data),
-    // Thêm hàm bọc API điều chỉnh tuần
-    adjustWeek:   (id, data) => api.post(`/workout-plans/${id}/adjust-week`, data)
+    adjustWeek:   (id, data) => api.post(`/workout-plans/${id}/adjust-week`, data),
+    // === MỚI: User xem & chọn giáo án mẫu do admin tạo ===
+    getTemplates:    ()    => api.get('/workout-plans/templates'),
+    selectTemplate:  (id)  => api.post(`/workout-plans/templates/${id}/select`)
 }
 
 // ── Sessions ──────────────────────────────────
@@ -143,9 +145,11 @@ export const adminAPI = {
     getRevenue:         ()           => api.get('/admin/stats/revenue'),
     getPlans:           ()           => api.get('/admin/workout-plans'),
     getUserPlans:       (uid)        => api.get(`/admin/workout-plans/user/${uid}`),
-    createPlan:         (data)       => api.post('/admin/workout-plans', data),
-    updatePlan:         (id, data)   => api.put(`/admin/workout-plans/${id}`, data),
     deletePlan:         (id)         => api.delete(`/admin/workout-plans/${id}`),
+    getTemplates:       ()           => api.get('/admin/workout-plans/templates'),
+    createTemplate:     (data)       => api.post('/admin/workout-plans/templates', data),
+    updateTemplate:     (id, data)   => api.put(`/admin/workout-plans/templates/${id}`, data),
+    deleteTemplate:     (id)         => api.delete(`/admin/workout-plans/templates/${id}`),
     broadcast:          (data)       => api.post('/admin/notifications/broadcast', data),
     sendToUser:         (uid, data)  => api.post(`/admin/notifications/user/${uid}`, data)
 }

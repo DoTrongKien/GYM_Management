@@ -1,6 +1,9 @@
 package com.example.gymmanagement.service;
 
+import com.example.gymmanagement.dto.request.TemplateDayRequest;
+import com.example.gymmanagement.dto.request.TemplateExerciseRequest;
 import com.example.gymmanagement.dto.request.WorkoutPlanRequest;
+import com.example.gymmanagement.dto.request.WorkoutTemplateRequest;
 import com.example.gymmanagement.dto.response.*;
 import com.example.gymmanagement.entity.*;
 import com.example.gymmanagement.enums.*;
@@ -8,7 +11,6 @@ import com.example.gymmanagement.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -213,6 +215,205 @@ public class WorkoutPlanService {
         WorkoutPlanResponse resp = toPlanResponse(savedPlan, profileRepo.findByUserId(user.getId()).orElse(null));
         resp.setScheduleNote(adjustMsg.isBlank() ? "✅ Giữ nguyên lịch tuần tiếp." : adjustMsg);
         return resp;
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // 4. ADMIN: Tạo template thủ công (chọn bài tập theo từng ngày)
+    // ─────────────────────────────────────────────────────────
+    @Transactional
+    public WorkoutPlanResponse createManualTemplate(WorkoutTemplateRequest req) {
+        validateTemplateRequest(req);
+
+        WorkoutPlan plan = WorkoutPlan.builder()
+                .user(null)                       // template chưa thuộc về ai
+                .planName(req.getPlanName())
+                .description(req.getDescription())
+                .goal(req.getGoal())
+                .targetLevel(req.getTargetLevel())
+                .durationWeeks(req.getDurationWeeks())
+                .sessionsPerWeek(req.getDays().size())
+                .currentWeek(1)
+                .isActive(true)
+                .isAiGenerated(false)
+                .isTemplate(true)
+                .build();
+        planRepo.save(plan);
+
+        List<WorkoutPlanDay> days = buildDaysFromRequest(plan, req.getDays());
+        dayRepo.saveAll(days);
+        plan.setPlanDays(days);
+
+        return toPlanResponse(plan, null);
+    }
+
+    @Transactional
+    public WorkoutPlanResponse updateManualTemplate(Long templateId, WorkoutTemplateRequest req) {
+        validateTemplateRequest(req);
+
+        WorkoutPlan plan = planRepo.findById(templateId)
+                .orElseThrow(() -> new RuntimeException("Template not found"));
+        if (!Boolean.TRUE.equals(plan.getIsTemplate())) {
+            throw new RuntimeException("Plan này không phải template");
+        }
+
+        plan.setPlanName(req.getPlanName());
+        plan.setDescription(req.getDescription());
+        plan.setGoal(req.getGoal());
+        plan.setTargetLevel(req.getTargetLevel());
+        plan.setDurationWeeks(req.getDurationWeeks());
+        plan.setSessionsPerWeek(req.getDays().size());
+
+        // Xóa exercises + days cũ trước (đúng thứ tự FK như adjustPlanAfterWeek đã làm)
+        List<WorkoutPlanDay> oldDays = dayRepo.findByWorkoutPlanIdOrderByDayOfWeek(plan.getId());
+        if (oldDays != null && !oldDays.isEmpty()) {
+            sessionRepo.deleteByPlanDayIds(oldDays.stream().map(WorkoutPlanDay::getId).collect(Collectors.toList()));
+            dayRepo.deleteAll(oldDays);
+        }
+
+        List<WorkoutPlanDay> newDays = buildDaysFromRequest(plan, req.getDays());
+        List<WorkoutPlanDay> saved = dayRepo.saveAll(newDays);
+        plan.setPlanDays(saved);
+
+        WorkoutPlan savedPlan = planRepo.save(plan);
+        return toPlanResponse(savedPlan, null);
+    }
+
+    public List<WorkoutPlanResponse> getAllTemplates(boolean onlyActive) {
+        List<WorkoutPlan> templates = onlyActive
+                ? planRepo.findByIsTemplateTrueAndIsActiveTrueOrderByCreatedAtDesc()
+                : planRepo.findByIsTemplateTrueOrderByCreatedAtDesc();
+        return templates.stream().map(p -> {
+            p.setPlanDays(dayRepo.findByWorkoutPlanIdOrderByDayOfWeek(p.getId()));
+            return toPlanResponse(p, null);
+        }).collect(Collectors.toList());
+    }
+
+    @Transactional
+    public void deleteTemplate(Long templateId) {
+        WorkoutPlan plan = planRepo.findById(templateId)
+                .orElseThrow(() -> new RuntimeException("Template not found"));
+        if (!Boolean.TRUE.equals(plan.getIsTemplate())) {
+            throw new RuntimeException("Plan này không phải template");
+        }
+        plan.setIsActive(false);
+        planRepo.save(plan);
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // 5. USER: Chọn 1 template -> copy thành giáo án active của user
+    // ─────────────────────────────────────────────────────────
+    @Transactional
+    public WorkoutPlanResponse selectTemplate(String email, Long templateId) {
+        User user = getUser(email);
+        WorkoutPlan template = planRepo.findById(templateId)
+                .orElseThrow(() -> new RuntimeException("Template not found"));
+        if (!Boolean.TRUE.equals(template.getIsTemplate())) {
+            throw new RuntimeException("Plan này không phải template");
+        }
+
+        List<WorkoutPlanDay> templateDays = dayRepo.findByWorkoutPlanIdOrderByDayOfWeek(template.getId());
+        UserProfile profile = profileRepo.findByUserId(user.getId()).orElse(null);
+
+        // Tắt plan active cũ của user (nếu có) — giống logic generate AI
+        planRepo.findByUserIdAndIsActiveTrue(user.getId()).ifPresent(p -> {
+            p.setIsActive(false);
+            planRepo.save(p);
+        });
+
+        WorkoutPlan newPlan = WorkoutPlan.builder()
+                .user(user)
+                .planName(template.getPlanName())
+                .description(template.getDescription())
+                .goal(template.getGoal())
+                .targetLevel(template.getTargetLevel())
+                .durationWeeks(template.getDurationWeeks())
+                .sessionsPerWeek(template.getSessionsPerWeek())
+                .currentWeek(1)
+                .startingBmi(profile != null ? profile.getBmi() : null)
+                .startingWeight(profile != null ? profile.getWeight() : null)
+                .isActive(true)
+                .isAiGenerated(false)
+                .isTemplate(false)
+                .build();
+        planRepo.save(newPlan);
+
+        List<WorkoutPlanDay> copiedDays = new ArrayList<>();
+        for (WorkoutPlanDay srcDay : templateDays) {
+            WorkoutPlanDay newDay = WorkoutPlanDay.builder()
+                    .workoutPlan(newPlan)
+                    .dayOfWeek(srcDay.getDayOfWeek())
+                    .dayName(srcDay.getDayName())
+                    .build();
+
+            List<WorkoutPlanExercise> copiedExercises = new ArrayList<>();
+            if (srcDay.getExercises() != null) {
+                for (WorkoutPlanExercise srcEx : srcDay.getExercises()) {
+                    copiedExercises.add(WorkoutPlanExercise.builder()
+                            .planDay(newDay)
+                            .exercise(srcEx.getExercise())
+                            .sets(srcEx.getSets())
+                            .reps(srcEx.getReps())
+                            .durationSeconds(srcEx.getDurationSeconds())
+                            .restSeconds(srcEx.getRestSeconds())
+                            .orderIndex(srcEx.getOrderIndex())
+                            .notes(srcEx.getNotes())
+                            .build());
+                }
+            }
+            newDay.setExercises(copiedExercises);
+            copiedDays.add(newDay);
+        }
+
+        List<WorkoutPlanDay> savedDays = dayRepo.saveAll(copiedDays);
+        newPlan.setPlanDays(savedDays);
+
+        return toPlanResponse(newPlan, profile);
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Helper cho template
+    // ─────────────────────────────────────────────────────────
+    private void validateTemplateRequest(WorkoutTemplateRequest req) {
+        if (req.getDays() == null || req.getDays().isEmpty()) {
+            throw new RuntimeException("Template cần ít nhất 1 ngày tập");
+        }
+        for (TemplateDayRequest d : req.getDays()) {
+            if (d.getExercises() == null || d.getExercises().isEmpty()) {
+                throw new RuntimeException("Mỗi ngày tập cần ít nhất 1 bài tập (ngày: " + d.getDayName() + ")");
+            }
+        }
+    }
+
+    private List<WorkoutPlanDay> buildDaysFromRequest(WorkoutPlan plan, List<TemplateDayRequest> dayReqs) {
+        List<WorkoutPlanDay> days = new ArrayList<>();
+        for (TemplateDayRequest dReq : dayReqs) {
+            WorkoutPlanDay day = WorkoutPlanDay.builder()
+                    .workoutPlan(plan)
+                    .dayOfWeek(dReq.getDayOfWeek())
+                    .dayName(dReq.getDayName())
+                    .build();
+
+            List<WorkoutPlanExercise> exercises = new ArrayList<>();
+            int idx = 1;
+            for (TemplateExerciseRequest exReq : dReq.getExercises()) {
+                Exercise ex = exerciseRepo.findById(exReq.getExerciseId())
+                        .orElseThrow(() -> new RuntimeException("Exercise id=" + exReq.getExerciseId() + " không tồn tại"));
+                exercises.add(WorkoutPlanExercise.builder()
+                        .planDay(day)
+                        .exercise(ex)
+                        .sets(exReq.getSets())
+                        .reps(exReq.getReps())
+                        .durationSeconds(exReq.getDurationSeconds())
+                        .restSeconds(exReq.getRestSeconds())
+                        .orderIndex(exReq.getOrderIndex() != null ? exReq.getOrderIndex() : idx)
+                        .notes(exReq.getNotes())
+                        .build());
+                idx++;
+            }
+            day.setExercises(exercises);
+            days.add(day);
+        }
+        return days;
     }
 
     // ─────────────────────────────────────────────────────────
@@ -480,6 +681,7 @@ public class WorkoutPlanService {
                 .currentWeek(plan.getCurrentWeek())
                 .isActive(plan.getIsActive())
                 .isAiGenerated(plan.getIsAiGenerated())
+                .isTemplate(plan.getIsTemplate())
                 .isCompleted(plan.getIsCompleted())
                 .weekStartDate(plan.getWeekStartDate())
                 .createdAt(plan.getCreatedAt())
