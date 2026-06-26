@@ -20,6 +20,7 @@ public class WorkoutPlanResponse {
     private Integer currentWeek;
     private Boolean isActive;
     private Boolean isAiGenerated;
+    private Boolean isTemplate;
     private Boolean isCompleted;
     private LocalDate  weekStartDate;
     private LocalDateTime createdAt;

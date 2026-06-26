@@ -42,6 +42,11 @@ public class WorkoutPlan {
     private Boolean isActive      = true;
     @Builder.Default
     private Boolean isAiGenerated = false;
+
+    // === MỚI: true = template do admin tạo tay (chưa gán user) ===
+    @Builder.Default
+    private Boolean isTemplate = false;
+
     @Builder.Default
     private Boolean isCompleted   = false;
 

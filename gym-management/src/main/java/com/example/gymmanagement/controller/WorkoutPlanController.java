@@ -21,6 +21,23 @@ public class WorkoutPlanController {
 
     private final WorkoutPlanService planService;
 
+    // GET /api/workout-plans/templates — user xem danh sách giáo án mẫu để chọn
+    @GetMapping("/templates")
+    public ResponseEntity<ApiResponse<List<WorkoutPlanResponse>>> getTemplates() {
+        return ResponseEntity.ok(ApiResponse.success(planService.getAllTemplates(true)));
+    }
+
+    // POST /api/workout-plans/templates/{id}/select — user chọn 1 template -> tạo plan active cho mình
+    @PostMapping("/templates/{id}/select")
+    public ResponseEntity<ApiResponse<WorkoutPlanResponse>> selectTemplate(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails ud) { // Đồng bộ sử dụng @AuthenticationPrincipal UserDetails
+
+        String email = ud.getUsername();
+        return ResponseEntity.ok(ApiResponse.success(
+                planService.selectTemplate(email, id), "Đã áp dụng giáo án mẫu"));
+    }
+
     // Tạo giáo án AI theo hồ sơ + mục tiêu + số ngày
     @PostMapping("/generate-with-goal")
     public ResponseEntity<ApiResponse<WorkoutPlanResponse>> generateWithGoal(

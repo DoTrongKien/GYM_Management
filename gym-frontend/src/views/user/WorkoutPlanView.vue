@@ -4,7 +4,7 @@
       <h2>GIÁO ÁN TẬP</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <el-button v-if="plan" @click="allPlansDialog=true" plain>📋 Tất cả giáo án</el-button>
-        <el-button @click="goalDialog=true" type="primary">✨ {{ plan ? 'Tạo lại' : 'Tạo giáo án' }}</el-button>
+        <el-button @click="openGoalDialog" type="primary">✨ {{ plan ? 'Tạo lại' : 'Tạo giáo án' }}</el-button>
       </div>
     </div>
 
@@ -12,9 +12,9 @@
       <div style="font-size:4rem;margin-bottom:16px">🤖</div>
       <h3 class="display" style="font-size:1.8rem;color:var(--c-text);margin-bottom:8px">CHƯA CÓ GIÁO ÁN</h3>
       <p style="color:var(--c-text2);margin-bottom:20px;max-width:440px;margin-left:auto;margin-right:auto">
-        Hệ thống sẽ tự động chọn bài tập phù hợp nhất theo mục tiêu của bạn, dựa trên chỉ số benefit và chỉ số hồ sơ cá nhân (BMI, cân nặng).
+        Hệ thống sẽ tự động chọn bài tập phù hợp nhất theo mục tiêu của bạn, dựa trên chỉ số benefit và chỉ số hồ sơ cá nhân (BMI, cân nặng). Hoặc bạn có thể chọn một giáo án mẫu do phòng tập thiết kế sẵn.
       </p>
-      <el-button type="primary" size="large" @click="goalDialog=true">✨ Chọn mục tiêu & Tạo giáo án</el-button>
+      <el-button type="primary" size="large" @click="openGoalDialog">✨ Chọn mục tiêu & Tạo giáo án</el-button>
     </div>
 
     <div v-if="loading" style="padding:40px 0">
@@ -33,12 +33,13 @@
               <el-tag type="danger">Tuần {{ plan.currentWeek }} / {{ plan.durationWeeks }}</el-tag>
               <el-tag>{{ plan.sessionsPerWeek }} buổi/tuần</el-tag>
               <el-tag v-if="plan.isAiGenerated" type="success">✨ Hệ Thống AI</el-tag>
+              <el-tag v-else-if="!plan.isAiGenerated" type="warning" effect="plain">📋 Giáo án mẫu</el-tag>
             </div>
             <div v-if="plan.scheduleNote" class="backend-note">
               💡 <strong>Phân tích từ AI:</strong> {{ plan.scheduleNote }}
             </div>
           </div>
-          <el-button type="primary" plain size="small" @click="goalDialog=true">
+          <el-button type="primary" plain size="small" @click="openGoalDialog">
             🔄 Đổi mục tiêu
           </el-button>
         </div>
@@ -153,56 +154,106 @@
       </div>
     </template>
 
-    <el-dialog v-model="goalDialog" title="TẠO GIÁO ÁN THEO CHỈ SỐ" width="520px" align-center>
-      <div style="margin-bottom:20px">
-        <div style="font-weight:700;color:var(--c-text);margin-bottom:12px">🎯 Chọn mục tiêu chính</div>
-        <div class="goal-grid">
-          <div
-              v-for="g in goals" :key="g.value"
-              class="goal-card"
-              :class="{selected: genForm.goal === g.value}"
-              @click="handleGoalSelect(g.value)"
-          >
-            <div class="goal-icon">{{ g.icon }}</div>
-            <div class="goal-label">{{ g.label }}</div>
-            <div class="goal-desc">{{ g.desc }}</div>
+    <!-- ===================== DIALOG TẠO GIÁO ÁN (AI hoặc Giáo án mẫu) ===================== -->
+    <el-dialog v-model="goalDialog" title="TẠO GIÁO ÁN" width="560px" align-center>
+      <el-tabs v-model="createTab">
+
+        <el-tab-pane label="✨ AI tự tạo theo mục tiêu" name="ai">
+          <div style="margin-bottom:20px">
+            <div style="font-weight:700;color:var(--c-text);margin-bottom:12px">🎯 Chọn mục tiêu chính</div>
+            <div class="goal-grid">
+              <div
+                  v-for="g in goals" :key="g.value"
+                  class="goal-card"
+                  :class="{selected: genForm.goal === g.value}"
+                  @click="handleGoalSelect(g.value)"
+              >
+                <div class="goal-icon">{{ g.icon }}</div>
+                <div class="goal-label">{{ g.label }}</div>
+                <div class="goal-desc">{{ g.desc }}</div>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <el-divider/>
+          <el-divider/>
 
-      <div style="margin-bottom:16px">
-        <div style="font-weight:700;color:var(--c-text);margin-bottom:10px">⚙️ Tuỳ chỉnh nâng cao</div>
-        <div class="grid-2">
-          <el-form-item label="Trình độ">
-            <el-select v-model="genForm.fitnessLevel" placeholder="Tự lấy từ Hồ sơ (BMI)" clearable style="width:100%">
-              <el-option label="🌱 Mới bắt đầu" value="BEGINNER"/>
-              <el-option label="🔄 Trung bình" value="INTERMEDIATE"/>
-              <el-option label="⚡ Nâng cao" value="ADVANCED"/>
-            </el-select>
-          </el-form-item>
-          <el-form-item :label="'Số ngày/tuần (Min ' + minDaysRequired + ')'">
-            <el-select v-model="genForm.daysPerWeek" placeholder="Tự lấy từ Hồ sơ" clearable style="width:100%">
-              <el-option v-for="d in validDaysOptions" :key="d" :label="d + ' ngày'" :value="d"/>
-            </el-select>
-          </el-form-item>
-        </div>
-      </div>
+          <div style="margin-bottom:16px">
+            <div style="font-weight:700;color:var(--c-text);margin-bottom:10px">⚙️ Tuỳ chỉnh nâng cao</div>
+            <div class="grid-2">
+              <el-form-item label="Trình độ">
+                <el-select v-model="genForm.fitnessLevel" placeholder="Tự lấy từ Hồ sơ (BMI)" clearable style="width:100%">
+                  <el-option label="🌱 Mới bắt đầu" value="BEGINNER"/>
+                  <el-option label="🔄 Trung bình" value="INTERMEDIATE"/>
+                  <el-option label="⚡ Nâng cao" value="ADVANCED"/>
+                </el-select>
+              </el-form-item>
+              <el-form-item :label="'Số ngày/tuần (Min ' + minDaysRequired + ')'">
+                <el-select v-model="genForm.daysPerWeek" placeholder="Tự lấy từ Hồ sơ" clearable style="width:100%">
+                  <el-option v-for="d in validDaysOptions" :key="d" :label="d + ' ngày'" :value="d"/>
+                </el-select>
+              </el-form-item>
+            </div>
+          </div>
 
-      <div class="info-box" v-if="genForm.goal">
-        <div style="font-weight:700;margin-bottom:6px;color:var(--c-accent)">
-          {{ goals.find(g=>g.value===genForm.goal)?.icon }} {{ goals.find(g=>g.value===genForm.goal)?.label }}
-        </div>
-        <div style="font-size:0.82rem;color:var(--c-text2)">
-          {{ goals.find(g=>g.value===genForm.goal)?.aiNote }}
-        </div>
-      </div>
+          <div class="info-box" v-if="genForm.goal">
+            <div style="font-weight:700;margin-bottom:6px;color:var(--c-accent)">
+              {{ goals.find(g=>g.value===genForm.goal)?.icon }} {{ goals.find(g=>g.value===genForm.goal)?.label }}
+            </div>
+            <div style="font-size:0.82rem;color:var(--c-text2)">
+              {{ goals.find(g=>g.value===genForm.goal)?.aiNote }}
+            </div>
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="📋 Chọn giáo án mẫu" name="template">
+          <div v-if="loadingTemplates" style="padding:20px 0">
+            <el-skeleton :rows="3" animated />
+          </div>
+          <div v-else-if="!templates.length" style="text-align:center;padding:30px;color:var(--c-text3)">
+            Hiện chưa có giáo án mẫu nào từ phòng tập.
+          </div>
+          <div v-else class="template-list">
+            <div
+                v-for="t in templates" :key="t.id"
+                class="template-card"
+                :class="{selected: selectedTemplateId === t.id}"
+                @click="selectedTemplateId = t.id"
+            >
+              <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div>
+                  <div style="font-weight:700;color:var(--c-text)">{{ t.planName }}</div>
+                  <div style="font-size:0.8rem;color:var(--c-text2);margin-top:2px">{{ t.description }}</div>
+                </div>
+                <el-tag size="small">{{ t.sessionsPerWeek }} buổi/tuần</el-tag>
+              </div>
+              <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+                <el-tag type="warning" size="small">{{ goalLabel(t.goal) }}</el-tag>
+                <el-tag type="info" size="small">{{ levelLabel(t.targetLevel) }}</el-tag>
+                <el-tag size="small">{{ t.durationWeeks }} tuần</el-tag>
+              </div>
+            </div>
+          </div>
+        </el-tab-pane>
+
+      </el-tabs>
 
       <template #footer>
         <el-button @click="goalDialog=false">Hủy</el-button>
-        <el-button type="primary" @click="generateWithGoal" :loading="generating" :disabled="!genForm.goal">
+
+        <el-button
+            v-if="createTab === 'ai'"
+            type="primary" @click="generateWithGoal"
+            :loading="generating" :disabled="!genForm.goal"
+        >
           ✨ KHỞI TẠO GIÁO ÁN
+        </el-button>
+
+        <el-button
+            v-else
+            type="primary" @click="applyTemplate"
+            :loading="applyingTemplate" :disabled="!selectedTemplateId"
+        >
+          ✅ ÁP DỤNG GIÁO ÁN NÀY
         </el-button>
       </template>
     </el-dialog>
@@ -384,6 +435,13 @@ const selectedDay = ref(null)
 const selectedDayNumber = ref(null)
 const checkoutSessionId = ref(null)
 
+// === MỚI: state cho dialog tạo giáo án có 2 tab (AI / Giáo án mẫu) ===
+const createTab = ref('ai')
+const templates = ref([])
+const loadingTemplates = ref(false)
+const selectedTemplateId = ref(null)
+const applyingTemplate = ref(false)
+
 const genForm = reactive({
   goal: '',
   fitnessLevel: null,
@@ -523,7 +581,27 @@ async function load() {
   }
 }
 
-// ====================== GENERATE PLAN ======================
+// ====================== MỞ DIALOG TẠO GIÁO ÁN ======================
+function openGoalDialog() {
+  goalDialog.value = true
+  createTab.value = 'ai'
+  selectedTemplateId.value = null
+  loadTemplates()
+}
+
+async function loadTemplates() {
+  loadingTemplates.value = true
+  try {
+    const res = await planAPI.getTemplates()
+    templates.value = res.data || []
+  } catch (e) {
+    // im lặng, không chặn tab AI nếu API template lỗi
+  } finally {
+    loadingTemplates.value = false
+  }
+}
+
+// ====================== GENERATE PLAN (AI) ======================
 async function generateWithGoal() {
   if (!genForm.goal) {
     ElMessage.warning('Hãy chọn mục tiêu')
@@ -548,6 +626,24 @@ async function generateWithGoal() {
     ElMessage.error('Tạo giáo án thất bại')
   } finally {
     generating.value = false
+  }
+}
+
+// ====================== CHỌN GIÁO ÁN MẪU ======================
+async function applyTemplate() {
+  if (!selectedTemplateId.value) return
+  applyingTemplate.value = true
+  try {
+    const r = await planAPI.selectTemplate(selectedTemplateId.value)
+    plan.value = r.data
+    goalDialog.value = false
+    selectedTemplateId.value = null
+    ElMessage.success('Đã áp dụng giáo án mẫu thành công! 🎉')
+    await load()
+  } catch (err) {
+    ElMessage.error(err.response?.data?.message || 'Áp dụng giáo án mẫu thất bại')
+  } finally {
+    applyingTemplate.value = false
   }
 }
 
@@ -625,56 +721,13 @@ async function submitCheckOut() {
   }
 }
 
-// ====================== ADJUST WEEK (ĐÃ SỬA THEO BACKEND) ======================
+// ====================== ADJUST WEEK ======================
 function openAdjustWeekDialog() {
   adjustForm.newWeight = plan.value?.startingWeight || null
   adjustForm.newBodyFat = null
   adjustWeekDialog.value = true
 }
 
-// async function submitAdjustWeek() {
-//   if (!adjustForm.newWeight) {
-//     ElMessage.warning('Vui lòng nhập cân nặng hiện tại')
-//     return
-//   }
-//
-//   adjusting.value = true
-//   try {
-//     const response = await planAPI.adjustWeek(plan.value.id, {
-//       newWeight: adjustForm.newWeight,
-//       newBodyFat: adjustForm.newBodyFat
-//     })
-//
-//     const adjustNote = response.data?.scheduleNote || 'Giáo án đã được cập nhật cho tuần mới.'
-//
-//     // Hiển thị thông báo theo logic backend
-//     if (adjustNote.includes('📉') || adjustNote.includes('quá sức')) {
-//       ElMessage({
-//         message: adjustNote,
-//         type: 'warning',
-//         duration: 9000,
-//         dangerouslyUseHTMLString: true
-//       })
-//     } else if (adjustNote.includes('🚀') || adjustNote.includes('🔥')) {
-//       ElMessage({
-//         message: adjustNote,
-//         type: 'success',
-//         duration: 9000,
-//         dangerouslyUseHTMLString: true
-//       })
-//     } else {
-//       ElMessage.success(adjustNote)
-//     }
-//
-//     adjustWeekDialog.value = false
-//     await load() // Load lại giáo án mới (có thể thay đổi level, exercises...)
-//
-//   } catch (err) {
-//     ElMessage.error(err.response?.data?.message || 'Có lỗi xảy ra khi điều chỉnh giáo án')
-//   } finally {
-//     adjusting.value = false
-//   }
-// }
 async function submitAdjustWeek() {
   if (!adjustForm.newWeight) {
     ElMessage.warning('Vui lòng nhập cân nặng hiện tại')
@@ -688,11 +741,9 @@ async function submitAdjustWeek() {
       newBodyFat: adjustForm.newBodyFat
     })
 
-    // Vì interceptor trả về ApiResponse → lấy .data
     const planData = apiResponse.data
     const adjustNote = planData?.scheduleNote || 'Giáo án đã được cập nhật cho tuần mới.'
 
-    // Hiển thị thông báo theo logic backend
     if (adjustNote.includes('📉') || adjustNote.includes('quá sức')) {
       ElMessage({
         message: adjustNote,
@@ -712,7 +763,7 @@ async function submitAdjustWeek() {
     }
 
     adjustWeekDialog.value = false
-    await load()   // Load lại giáo án mới
+    await load()
 
   } catch (err) {
     ElMessage.error(err.response?.data?.message || 'Có lỗi xảy ra khi điều chỉnh giáo án')
@@ -807,6 +858,17 @@ onMounted(load)
 .info-box {
   padding:12px 14px; background:#FFF8F0; border:1px solid var(--c-border); border-radius:var(--radius-lg); margin-top:12px;
 }
+
+.template-list { display:flex; flex-direction:column; gap:10px; max-height:360px; overflow-y:auto; }
+.template-card {
+  border:2px solid var(--c-border2); border-radius:var(--radius-lg);
+  padding:12px 14px; cursor:pointer; transition:all var(--transition); background:var(--c-card2);
+}
+.template-card:hover { border-color:var(--c-accent); }
+.template-card.selected { border-color:var(--c-accent); background:#FFF8F0; }
+
+.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+
 .schedule-section { margin: 12px 0; padding: 10px 12px; background: var(--c-card2); border-radius: var(--radius); }
 .no-schedule { display: flex; justify-content: center; padding: 2px 0; }
 .scheduled { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

@@ -1,6 +1,7 @@
 package com.example.gymmanagement.controller;
 
 import com.example.gymmanagement.dto.response.*;
+import com.example.gymmanagement.dto.request.WorkoutTemplateRequest;
 import com.example.gymmanagement.entity.*;
 import com.example.gymmanagement.enums.PaymentStatus;
 import com.example.gymmanagement.repository.*;
@@ -167,10 +168,6 @@ public class AdminController {
         stats.put("activeUsers",    userRepository.findAllActiveUsers().size());
         return ResponseEntity.ok(ApiResponse.success(stats));
     }
-
-    // ─── Workout Plan Management ──────────────────────────────
-
-
     // ─── Notifications / Broadcast ────────────────────────────
     @PostMapping("/notifications/broadcast")
     public ResponseEntity<ApiResponse<Void>> broadcast(@RequestBody Map<String, String> body) {
