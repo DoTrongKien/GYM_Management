@@ -40,6 +40,8 @@ public class WorkoutPlanResponse {
     private List<String>             suggestedDays;
     private String                   scheduleNote;
 
+    private String weightAdjustmentNote;
+
     // Tiến độ tuần hiện tại
     private Integer enrolledThisWeek;
     private Integer completedThisWeek;

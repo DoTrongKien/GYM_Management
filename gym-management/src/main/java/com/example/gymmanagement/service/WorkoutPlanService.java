@@ -691,8 +691,9 @@ public class WorkoutPlanService {
                 .setsAdjustment(plan.getSetsAdjustment())
                 .repsAdjustment(plan.getRepsAdjustment())
                 .planDays(days)
-                .suggestedDays(suggested)
-                .scheduleNote(note)
+                .weightAdjustmentNote(plan.getWeightAdjustmentNote())
+                .suggestedDays(Boolean.TRUE.equals(plan.getIsAiGenerated()) ? suggested : null)
+                .scheduleNote(Boolean.TRUE.equals(plan.getIsAiGenerated()) ? note : null)
                 .build();
     }
 

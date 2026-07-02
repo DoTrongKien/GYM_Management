@@ -59,27 +59,36 @@
             </div>
           </div>
 
-          <el-button
-              v-if="weekProgress.canGoNextWeek"
-              type="success"
-              size="large"
-              @click="openAdjustWeekDialog"
-          >
-            🚀 Sang Tuần Tiếp Theo (Căn Chỉnh AI)
-          </el-button>
+          <div v-if="weekProgress.canGoNextWeek" style="color:#16a34a;font-size:0.9rem;font-weight:600">
+            ✅ Đã hoàn thành tuần này! Giáo án đã tự động căn chỉnh và chuyển sang tuần tiếp theo.
+          </div>
           <div v-else-if="weekProgress.isWeekDone" style="color:var(--c-warning);font-size:0.9rem;font-weight:600">
             ⚠ Bạn cần hoàn thành Checkout buổi cuối tuần để nộp số liệu trước khi chuyển tuần!
           </div>
         </div>
       </el-card>
 
-      <div v-if="plan.suggestedDays && plan.suggestedDays.length" class="suggested-days-box">
-        <div style="font-weight:700;font-size:0.9rem;margin-bottom:6px">📅 Gợi ý ngày tập tối ưu từ AI:</div>
+<div v-if="plan.suggestedDays && plan.suggestedDays.length" class="suggested-days-box">
+  <div style="font-weight:700;font-size:0.9rem;margin-bottom:6px">📅 Gợi ý ngày tập tối ưu từ AI:</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <el-tag v-for="d in plan.suggestedDays" :key="d" effect="plain" type="success">
+      {{ dayViet(d) }}
+    </el-tag>
+  </div>
+</div>
+      <!-- Plan từ template: ngày tập cố định do admin set, map dayOfWeek → tên Việt -->
+      <div v-else-if="!plan.isAiGenerated" class="suggested-days-box">
+        <div style="font-weight:700;font-size:0.9rem;margin-bottom:6px">📅 Ngày tập theo lịch Admin:</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <el-tag v-for="d in plan.suggestedDays" :key="d" effect="plain" type="success">
-            {{ d }}
+          <el-tag v-for="day in plan.planDays" :key="day.id" effect="plain" type="warning">
+            {{ dowVietName(day.dayOfWeek) }}
           </el-tag>
         </div>
+      </div>
+
+      <!-- Gợi ý tăng/giảm tạ - hiện cho CẢ 2 loại plan -->
+      <div v-if="plan.weightAdjustmentNote" class="weight-adjustment-box">
+        ⚖️ <strong>Gợi ý mức tạ tuần này:</strong> {{ plan.weightAdjustmentNote }}
       </div>
 
       <div class="days-grid">
@@ -102,35 +111,43 @@
           </template>
 
           <div class="schedule-section">
-            <div v-if="day.sessionStatus === 'NOT_SCHEDULED' || !day.scheduledDate" class="no-schedule">
-              <el-button type="primary" plain size="small" @click="openScheduleDialog(day, index + 1)">
-                📅 Lên lịch buổi tập
-              </el-button>
-            </div>
-
-            <div v-else-if="day.sessionStatus === 'SCHEDULED'" class="scheduled">
-              <div class="date-display">
-                <span class="time-badge">W{{ plan.currentWeek }}</span>
-                <strong>{{ fmtDate(day.scheduledDate) }}</strong>
-                <span v-if="day.scheduledTime"> • {{ day.scheduledTime.substring(0, 5) }}</span>
+            <!-- Plan từ template: không cần lên lịch, check-in thẳng theo thời gian thực -->
+            <template v-if="!plan.isAiGenerated">
+              <div v-if="day.sessionStatus === 'NOT_SCHEDULED' || !day.sessionId" class="no-schedule">
+                <el-button type="success" size="small" @click="handleDirectCheckIn(day, index + 1)">
+                  🏃 Check-in ngay
+                </el-button>
               </div>
-              <div style="display:flex;gap:4px">
-                <el-button type="primary" link size="small" @click="openScheduleDialog(day, index + 1)">Sửa</el-button>
-                <el-button type="success" size="small" @click="handleCheckIn(day.sessionId)">Check-in 🏃</el-button>
+              <div v-else-if="day.sessionStatus === 'CHECKED_IN'" class="scheduled" style="background: #fef2f2; border: 1px dashed #fca5a5; padding: 6px; border-radius: 4px;">
+                <div class="date-display" style="color: #dc2626; font-weight: 700; font-size: 0.85rem">
+                  🔥 Đang trong buổi tập...
+                </div>
+                <el-button type="danger" size="small" @click="openCheckOutDialog(day, index + 1)">Check-out 🏁</el-button>
               </div>
-            </div>
-
-            <div v-else-if="day.sessionStatus === 'CHECKED_IN'" class="scheduled" style="background: #fef2f2; border: 1px dashed #fca5a5; padding: 6px; border-radius: 4px;">
-              <div class="date-display" style="color: #dc2626; font-weight: 700; font-size: 0.85rem">
-                🔥 Đang trong buổi tập...
+              <div v-else-if="day.sessionStatus === 'COMPLETED'" class="completed-zone">
+                ✨ Hoàn thành vào {{ fmtDate(day.scheduledDate) }}
+                <span v-if="day.completionRate !== null"> (Đạt {{ day.completionRate }}%)</span>
               </div>
-              <el-button type="danger" size="small" @click="openCheckOutDialog(day, index + 1)">Check-out 🏁</el-button>
-            </div>
+            </template>
 
-            <div v-else-if="day.sessionStatus === 'COMPLETED'" class="completed-zone">
-              ✨ Hoàn thành vào {{ fmtDate(day.scheduledDate) }}
-              <span v-if="day.completionRate !== null"> (Đạt {{ day.completionRate }}%)</span>
-            </div>
+            <!-- Plan AI: cũng check-in trực tiếp theo thời gian thực, không cần lên lịch -->
+            <template v-else>
+              <div v-if="day.sessionStatus === 'NOT_SCHEDULED' || !day.sessionId" class="no-schedule">
+                <el-button type="success" size="small" @click="handleDirectCheckIn(day, index + 1)">
+                  🏃 Check-in ngay
+                </el-button>
+              </div>
+              <div v-else-if="day.sessionStatus === 'CHECKED_IN'" class="scheduled" style="background: #fef2f2; border: 1px dashed #fca5a5; padding: 6px; border-radius: 4px;">
+                <div class="date-display" style="color: #dc2626; font-weight: 700; font-size: 0.85rem">
+                  🔥 Đang trong buổi tập...
+                </div>
+                <el-button type="danger" size="small" @click="openCheckOutDialog(day, index + 1)">Check-out 🏁</el-button>
+              </div>
+              <div v-else-if="day.sessionStatus === 'COMPLETED'" class="completed-zone">
+                ✨ Hoàn thành vào {{ fmtDate(day.scheduledDate) }}
+                <span v-if="day.completionRate !== null"> (Đạt {{ day.completionRate }}%)</span>
+              </div>
+            </template>
           </div>
 
           <div class="exercise-list">
@@ -214,10 +231,10 @@
           </div>
           <div v-else class="template-list">
             <div
-                v-for="t in templates" :key="t.id"
-                class="template-card"
-                :class="{selected: selectedTemplateId === t.id}"
-                @click="selectedTemplateId = t.id"
+              v-for="t in templates" :key="t.id"
+              class="template-card"
+              :class="{selected: selectedTemplateId === t.id}"
+              @click="selectedTemplateId = t.id"
             >
               <div style="display:flex;justify-content:space-between;align-items:flex-start">
                 <div>
@@ -241,17 +258,17 @@
         <el-button @click="goalDialog=false">Hủy</el-button>
 
         <el-button
-            v-if="createTab === 'ai'"
-            type="primary" @click="generateWithGoal"
-            :loading="generating" :disabled="!genForm.goal"
+          v-if="createTab === 'ai'"
+          type="primary" @click="generateWithGoal"
+          :loading="generating" :disabled="!genForm.goal"
         >
           ✨ KHỞI TẠO GIÁO ÁN
         </el-button>
 
         <el-button
-            v-else
-            type="primary" @click="applyTemplate"
-            :loading="applyingTemplate" :disabled="!selectedTemplateId"
+          v-else
+          type="primary" @click="applyTemplate"
+          :loading="applyingTemplate" :disabled="!selectedTemplateId"
         >
           ✅ ÁP DỤNG GIÁO ÁN NÀY
         </el-button>
@@ -326,35 +343,23 @@
           </div>
         </div>
 
-        <el-form-item label="Ghi chú buổi tập">
+        <el-form-item label="Ghi chú buổi tập" v-if="plan?.isAiGenerated">
           <el-input type="textarea" v-model="coForm.notes" rows="2" placeholder="Cảm nhận hôm nay..." />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="checkOutDialog=false">Hủy</el-button>
-        <el-button type="primary" @click="submitCheckOut" :loading="checkingOut">Hoàn thành buổi tập</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="adjustWeekDialog" title="🚀 CẬP NHẬT CHỈ SỐ & CHUYỂN TUẦN MỚI" width="460px" align-center>
-      <div style="margin-bottom:14px;font-size:0.9rem;color:var(--c-text2)">
-        Chúc mừng bạn đã hoàn thành tuần tập! Hãy nhập số liệu cơ thể hiện tại để AI tiến hành tính toán cấu trúc lại Reps/Sets/Độ khó tuần sau.
-      </div>
-      <el-form :model="adjustForm" label-position="top">
-        <el-form-item label="Cân nặng hiện tại (kg) *" required>
-          <el-input-number v-model="adjustForm.newWeight" :min="30" :max="300" :precision="1" style="width:100%"/>
-        </el-form-item>
-        <el-form-item label="Tỉ lệ mỡ cơ thể hiện tại (%) - Body Fat">
-          <el-input-number v-model="adjustForm.newBodyFat" :min="2" :max="60" :precision="1" style="width:100%"/>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="adjustWeekDialog=false">Hủy</el-button>
-        <el-button type="primary" @click="submitAdjustWeek" :loading="adjusting">
-          🔄 CẬP NHẬT GIÁO ÁN TUẦN TIẾP THEO
+        <el-button
+          type="primary"
+          @click="submitCheckOut"
+          :loading="checkingOut"
+        >
+          {{ coForm.isLastSessionOfWeek && plan?.isAiGenerated ? '✅ Hoàn thành và căn chỉnh bài tập' : 'Hoàn thành buổi tập' }}
         </el-button>
       </template>
     </el-dialog>
+
+
 
     <el-dialog v-model="exDetailDialog" :title="selEx?.exerciseName" width="540px" align-center v-if="selEx">
       <div v-if="selEx.videoUrl" class="video-wrap">
@@ -679,8 +684,11 @@ async function saveSchedule() {
 // ====================== CHECK IN / CHECK OUT ======================
 async function handleCheckIn(sessionId) {
   try {
-    await sessionAPI.checkIn(sessionId)
+    const r = await sessionAPI.checkIn(sessionId)
     ElMessage.success('Check-in thành công! Hãy tập luyện hết mình 💪')
+    if (r.data?.dayMismatchWarning) {
+      ElMessage({ message: r.data.dayMismatchWarning, type: 'warning', duration: 8000 })
+    }
     await load()
   } catch (err) {}
 }
@@ -703,7 +711,7 @@ async function submitCheckOut() {
   }
   checkingOut.value = true
   try {
-    await sessionAPI.complete(checkoutSessionId.value, {
+    const r = await sessionAPI.complete(checkoutSessionId.value, {
       sessionId: checkoutSessionId.value,
       completionRate: coForm.completionRate,
       checkoutWeight: coForm.checkoutWeight,
@@ -711,7 +719,13 @@ async function submitCheckOut() {
       notes: coForm.notes,
       exerciseLogs: []
     })
-    ElMessage.success('Hoàn thành buổi tập! 🎉')
+    // Nếu buổi cuối tuần plan AI → backend tự gọi adjustPlanAfterWeek()
+    // không cần gọi planAPI.adjustWeek riêng nữa
+    const isLastAi = coForm.isLastSessionOfWeek && plan.value?.isAiGenerated
+    ElMessage.success(isLastAi ? 'Hoàn thành tuần tập! Giáo án đã được căn chỉnh 🎉' : 'Hoàn thành buổi tập! 🎉')
+    if (r.data?.dayMismatchWarning) {
+      ElMessage({ message: r.data.dayMismatchWarning, type: 'warning', duration: 8000 })
+    }
     checkOutDialog.value = false
     await load()
   } catch (err) {
@@ -805,6 +819,11 @@ function levelLabel(l) {
   }[l] || l
 }
 
+function dayViet(name) {
+  return { Monday:'Thứ Hai', Tuesday:'Thứ Ba', Wednesday:'Thứ Tư',
+           Thursday:'Thứ Năm', Friday:'Thứ Sáu', Saturday:'Thứ Bảy', Sunday:'Chủ Nhật' }[name] || name
+}
+
 function muscleLabel(m) {
   return {
     CHEST: 'Ngực', BACK: 'Lưng', SHOULDERS: 'Vai', ARMS: 'Tay',
@@ -818,6 +837,45 @@ function diffLabel(d) {
 
 function diffBadge(d) {
   return { EASY: 'badge-success', MEDIUM: 'badge-warning', HARD: 'badge-danger' }[d] || ''
+}
+
+// Map ISO dayOfWeek (1=Thứ Hai ... 7=Chủ Nhật) sang tên tiếng Việt
+function dowVietName(dow) {
+  return {
+    1: 'Thứ Hai', 2: 'Thứ Ba', 3: 'Thứ Tư',
+    4: 'Thứ Năm', 5: 'Thứ Sáu', 6: 'Thứ Bảy', 7: 'Chủ Nhật'
+  }[dow] || dow
+}
+
+// Check-in trực tiếp cho plan từ template (không cần lên lịch trước)
+// Enroll + check-in 1 bước, lấy ngày/giờ thực tế ngay lúc bấm
+async function handleDirectCheckIn(day, dayNumber) {
+  const today = dayjs().format('YYYY-MM-DD')
+  const nowTime = dayjs().format('HH:mm:ss')
+  const isLast = (dayNumber === plan.value.sessionsPerWeek)
+
+  try {
+    // Bước 1: enroll session với ngày giờ thực tế
+    const enrollRes = await sessionAPI.enroll({
+      planDayId: day.id,
+      sessionDate: today,
+      scheduledTime: nowTime,
+      weekNumber: plan.value.currentWeek,
+      isLastSessionOfWeek: isLast
+    })
+    const sessionId = enrollRes.data?.id
+    if (!sessionId) throw new Error('Không lấy được session id')
+
+    // Bước 2: check-in ngay
+    const r = await sessionAPI.checkIn(sessionId)
+    ElMessage.success('Check-in thành công! Hãy tập luyện hết mình 💪')
+    if (r.data?.dayMismatchWarning) {
+      ElMessage({ message: r.data.dayMismatchWarning, type: 'warning', duration: 8000 })
+    }
+    await load()
+  } catch (err) {
+    ElMessage.error(err.response?.data?.message || 'Check-in thất bại')
+  }
 }
 
 onMounted(load)
@@ -837,6 +895,10 @@ onMounted(load)
 }
 .suggested-days-box {
   background: var(--c-card); padding: 14px; border-radius: 8px; margin-bottom: 20px; border: 1px dashed var(--c-border);
+}
+.weight-adjustment-box {
+  background: #fff7ed; color: #c2410c; padding: 12px 14px; border-radius: 8px;
+  margin-bottom: 20px; border: 1px solid #fed7aa; font-size: 0.875rem;
 }
 .anchor-info-box {
   background: #fef0f0; color: #f56c6c; padding: 10px 12px; border-radius: 6px; font-size: 0.85rem; border: 1px solid #fde2e2;

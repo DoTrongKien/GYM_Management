@@ -25,6 +25,7 @@ public class WorkoutSessionResponse {
     private Boolean isCustom;
     private Integer completionRate;
     private Boolean isLastSessionOfWeek;
+    private String dayMismatchWarning;
     private Double  checkoutWeight;
     private Double  checkoutBodyFat;
     private List<ExerciseLogResponse>         exerciseLogs;
