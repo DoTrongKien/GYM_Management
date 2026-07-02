@@ -35,6 +35,10 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSession, 
     @Query("SELECT s FROM WorkoutSession s WHERE s.user.id=:uid AND s.workoutPlan.id=:planId AND s.weekNumber=:week ORDER BY s.sessionDate")
     List<WorkoutSession> findByPlanAndWeek(@Param("uid") Long uid, @Param("planId") Long planId, @Param("week") Integer week);
 
+    @Query("SELECT s FROM WorkoutSession s WHERE s.user.id=:uid AND s.workoutPlan.id=:planId AND s.sessionDate IS NOT NULL ORDER BY s.sessionDate ASC, s.id ASC")
+    List<WorkoutSession> findByPlanOrderBySessionDate(@Param("uid") Long uid, @Param("planId") Long planId);
+
+
     @Query("SELECT s FROM WorkoutSession s WHERE s.user.id=:uid AND s.workoutPlan.id=:planId AND s.weekNumber=:week AND s.isLastSessionOfWeek=true")
     List<WorkoutSession> findLastSessionOfWeek(@Param("uid") Long uid, @Param("planId") Long planId, @Param("week") Integer week);
 

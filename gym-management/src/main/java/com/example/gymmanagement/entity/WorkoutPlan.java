@@ -71,6 +71,9 @@ public class WorkoutPlan {
     @Builder.Default
     private Integer exercisesAdjustment  = 0;
 
+    private String weightAdjustmentNote;
+
+
     private LocalDateTime createdAt;
 
     @OneToMany(mappedBy = "workoutPlan", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
