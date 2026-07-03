@@ -332,6 +332,7 @@ public class WorkoutSessionService {
                 .status(s.getStatus()).totalCaloriesBurned(s.getTotalCaloriesBurned())
                 .durationMinutes(s.getDurationMinutes()).notes(s.getNotes())
                 .weekNumber(s.getWeekNumber())
+                .planId(s.getWorkoutPlan() != null ? s.getWorkoutPlan().getId() : null)  // === MỚI
                 .planName(s.getWorkoutPlan()!=null ? s.getWorkoutPlan().getPlanName() : null)
                 .dayName(s.getPlanDay()!=null       ? s.getPlanDay().getDayName()    : null)
                 .customSessionName(s.getCustomSessionName()).isCustom(s.getIsCustom())
