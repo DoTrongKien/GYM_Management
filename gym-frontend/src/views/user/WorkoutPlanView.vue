@@ -68,14 +68,15 @@
         </div>
       </el-card>
 
-<div v-if="plan.suggestedDays && plan.suggestedDays.length" class="suggested-days-box">
-  <div style="font-weight:700;font-size:0.9rem;margin-bottom:6px">📅 Gợi ý ngày tập tối ưu từ AI:</div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap">
-    <el-tag v-for="d in plan.suggestedDays" :key="d" effect="plain" type="success">
-      {{ dayViet(d) }}
-    </el-tag>
-  </div>
-</div>
+      <div v-if="plan.suggestedDays && plan.suggestedDays.length" class="suggested-days-box">
+        <div style="font-weight:700;font-size:0.9rem;margin-bottom:6px">📅 Gợi ý ngày tập tối ưu từ AI:</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <el-tag v-for="d in plan.suggestedDays" :key="d" effect="plain" type="success">
+             {{ dowVietName(d) }}
+          </el-tag>
+        </div>
+      </div>
+
       <!-- Plan từ template: ngày tập cố định do admin set, map dayOfWeek → tên Việt -->
       <div v-else-if="!plan.isAiGenerated" class="suggested-days-box">
         <div style="font-weight:700;font-size:0.9rem;margin-bottom:6px">📅 Ngày tập theo lịch Admin:</div>
@@ -331,7 +332,7 @@
         <div v-if="coForm.isLastSessionOfWeek" class="body-progress-box">
           <h4 style="margin:0 0 10px 0; color:#b45309">⚖ CẬP NHẬT SỐ LIỆU CƠ THỂ (Buổi Cuối Tuần)</h4>
           <p style="font-size:0.8rem; margin:0 0 12px 0; color:#d97706">
-            Đây là buổi tập cuối cùng trong tuần này. Vui lòng nhập cân nặng hiện tại để AI cấu trúc lại độ khó giáo án.
+            Đây là buổi tập cuối cùng trong tuần này. Vui lòng nhập cân nặng hiện tại để có thể cập nhật chỉ số cơ thể.
           </p>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
             <el-form-item label="Cân nặng hiện tại (kg) *" required>
@@ -343,9 +344,7 @@
           </div>
         </div>
 
-        <el-form-item label="Ghi chú buổi tập" v-if="plan?.isAiGenerated">
-          <el-input type="textarea" v-model="coForm.notes" rows="2" placeholder="Cảm nhận hôm nay..." />
-        </el-form-item>
+
       </el-form>
       <template #footer>
         <el-button @click="checkOutDialog=false">Hủy</el-button>
@@ -503,7 +502,7 @@ const currentWeekAnchorDate = computed(() => {
   if (!activeSessions.value.length || !plan.value) return null
   const currentWeekSessions = activeSessions.value.filter(s =>
       s.weekNumber === plan.value.currentWeek &&
-      s.planName === plan.value.planName &&
+      s.planId === plan.value.id &&
       s.sessionDate
   )
   if (!currentWeekSessions.length) return null
@@ -527,7 +526,7 @@ function disableInvalidDates(date) {
   const formattedCheckDate = checkDate.format('YYYY-MM-DD')
   const isDateDuplicated = activeSessions.value.some(s =>
       s.sessionDate === formattedCheckDate &&
-      s.planName === plan.value.planName &&
+      s.planId === plan.value.id &&
       !(selectedDay.value && s.dayName === selectedDay.value.dayName)
   )
   if (isDateDuplicated) return true
@@ -561,8 +560,8 @@ async function load() {
       plan.value.planDays.forEach(day => {
         const standardSession = activeSessions.value.find(s =>
             s.weekNumber === plan.value.currentWeek &&
-            s.dayName === day.dayName &&
-            s.planName === plan.value.planName
+            s.planId === plan.value.id &&
+            s.dayName === day.dayName
         )
         if (standardSession) {
           day.sessionId = standardSession.id
@@ -706,7 +705,7 @@ function openCheckOutDialog(day, dayNumber) {
 
 async function submitCheckOut() {
   if (coForm.isLastSessionOfWeek && !coForm.checkoutWeight) {
-    ElMessage.warning('Vui lòng nhập cân nặng cuối tuần để AI phân tích cấu trúc lại giáo án!')
+    ElMessage.warning('Vui lòng nhập cân nặng để cập nhật chỉ số cơ thể!')
     return
   }
   checkingOut.value = true
@@ -819,11 +818,6 @@ function levelLabel(l) {
   }[l] || l
 }
 
-function dayViet(name) {
-  return { Monday:'Thứ Hai', Tuesday:'Thứ Ba', Wednesday:'Thứ Tư',
-           Thursday:'Thứ Năm', Friday:'Thứ Sáu', Saturday:'Thứ Bảy', Sunday:'Chủ Nhật' }[name] || name
-}
-
 function muscleLabel(m) {
   return {
     CHEST: 'Ngực', BACK: 'Lưng', SHOULDERS: 'Vai', ARMS: 'Tay',
@@ -840,11 +834,26 @@ function diffBadge(d) {
 }
 
 // Map ISO dayOfWeek (1=Thứ Hai ... 7=Chủ Nhật) sang tên tiếng Việt
-function dowVietName(dow) {
-  return {
-    1: 'Thứ Hai', 2: 'Thứ Ba', 3: 'Thứ Tư',
-    4: 'Thứ Năm', 5: 'Thứ Sáu', 6: 'Thứ Bảy', 7: 'Chủ Nhật'
-  }[dow] || dow
+function dowVietName(day) {
+  const map = {
+    1: 'Thứ Hai',
+    2: 'Thứ Ba',
+    3: 'Thứ Tư',
+    4: 'Thứ Năm',
+    5: 'Thứ Sáu',
+    6: 'Thứ Bảy',
+    7: 'Chủ Nhật',
+
+    Monday: 'Thứ Hai',
+    Tuesday: 'Thứ Ba',
+    Wednesday: 'Thứ Tư',
+    Thursday: 'Thứ Năm',
+    Friday: 'Thứ Sáu',
+    Saturday: 'Thứ Bảy',
+    Sunday: 'Chủ Nhật'
+  }
+
+  return map[day] || day
 }
 
 // Check-in trực tiếp cho plan từ template (không cần lên lịch trước)

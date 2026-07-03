@@ -56,6 +56,12 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSession, 
                                                  @Param("from") LocalTime from,
                                                  @Param("to") LocalTime to);
 
+    // Lấy tất cả session của user theo plan (dùng để xóa khi tạo plan mới)
+    @Query("SELECT s FROM WorkoutSession s WHERE s.user.id = :userId AND s.workoutPlan.id = :planId")
+    List<WorkoutSession> findByUserIdAndWorkoutPlanId(
+            @Param("userId") Long userId,
+            @Param("planId") Long planId);
+
     // ==================== THÊM MỚI ĐỂ XÓA AN TOÀN KHI ĐIỀU CHỈNH GIÁO ÁN ====================
     void deleteByPlanDayId(Long planDayId);
 

@@ -20,6 +20,7 @@ public class WorkoutSessionResponse {
     private String  notes;
     private Integer weekNumber;
     private String  planName;
+    private Long planId;  // === MỚI: dùng để FE match session đúng plan, tránh nhầm plan cùng tên
     private String  dayName;
     private String  customSessionName;
     private Boolean isCustom;
