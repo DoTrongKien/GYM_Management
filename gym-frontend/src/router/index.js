@@ -103,6 +103,15 @@ const router = createRouter({
                         import('@/views/user/MembershipView.vue')
                 },
 
+                // 📌 THÊM VÀO ĐÂY: Màn hình quét QR dành cho khách hàng
+                // Đường dẫn thực tế sẽ là: /app/payment/:invoiceId
+                {
+                    path: 'payment/:invoiceId',
+                    name: 'UserPaymentQR',
+                    component: () =>
+                        import('@/views/user/PaymentQR.vue') // Đảm bảo bạn lưu file PaymentQR.vue vào mục src/views/user/ nhé
+                },
+
                 {
                     path: 'exercises',
                     name: 'Exercises',
@@ -158,6 +167,15 @@ const router = createRouter({
                     name: 'AdminMemberships',
                     component: () =>
                         import('@/views/admin/MembershipsView.vue')
+                },
+
+                // 📌 THÊM VÀO ĐÂY: Màn hình Duyệt hủy gói cho Admin
+                // Đường dẫn thực tế sẽ là: /admin/approve-cancellation
+                {
+                    path: 'approve-cancellation',
+                    name: 'AdminApproveCancellation',
+                    component: () =>
+                        import('@/views/admin/AdminApproval.vue') // Đảm bảo bạn lưu file AdminApproval.vue vào mục src/views/admin/ nhé
                 },
 
                 {
