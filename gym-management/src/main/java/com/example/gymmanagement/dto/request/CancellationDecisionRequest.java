@@ -1,2 +1,8 @@
-package com.example.gymmanagement.dto.request;public class CancellationDecisionRequest {
+package com.example.gymmanagement.dto.request;
+
+import lombok.*;
+
+@Data @NoArgsConstructor @AllArgsConstructor
+public class CancellationDecisionRequest {
+    private String adminNote;
 }
