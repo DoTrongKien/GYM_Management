@@ -89,6 +89,15 @@ export const membershipAPI = {
     confirmPayment: (id, txId) => api.post(`/memberships/${id}/confirm-payment`, { transactionId: txId })
 }
 
+// ── Invoices (MoMo QR) ─────────────────────────
+export const invoiceAPI = {
+    create:        (membershipType) => api.post('/invoices', { membershipType }),
+    getAll:        ()   => api.get('/invoices'),
+    getOne:        (id) => api.get(`/invoices/${id}`),
+    regenerateQr:  (id) => api.post(`/invoices/${id}/regenerate-qr`),
+    cancel:        (id) => api.post(`/invoices/${id}/cancel`)
+}
+
 // ── Nutrition ─────────────────────────────────
 export const nutritionAPI = {
     generate:   ()  => api.post('/nutrition/generate'),

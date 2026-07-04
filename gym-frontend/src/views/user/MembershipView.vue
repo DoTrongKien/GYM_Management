@@ -103,9 +103,11 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { membershipAPI } from '@/api'
+import { useRouter } from 'vue-router'
+import { membershipAPI, invoiceAPI } from '@/api'
 import { ElMessage } from 'element-plus'
 
+const router        = useRouter()
 const memberships   = ref([])
 const active        = ref(null)
 const purchaseDialog= ref(false)
@@ -145,11 +147,28 @@ function selectPkg(pkg) { form.membershipType = pkg.type; purchaseDialog.value =
 async function purchase() {
   purchasing.value = true
   try {
-    await membershipAPI.purchase(form)
-    ElMessage.success('Đăng ký thành công! Chờ admin xác nhận thanh toán.')
+    // QUAN TRỌNG: gọi invoiceAPI.create() để tạo HÓA ĐƠN MoMo (có qrCodeUrl, price đúng gói),
+    // KHÔNG gọi membershipAPI.purchase() (API đó tạo Membership cũ, không có QR).
+    const response = await invoiceAPI.create(form.membershipType)
+
     purchaseDialog.value = false
-    load()
-  } catch {} finally { purchasing.value = false }
+
+    // response = ApiResponse { success, message, data: InvoiceResponse }
+    const data = response.data || response
+    const invoiceId = data.id
+
+    if (invoiceId) {
+      ElMessage.success('Đang chuyển hướng đến trang thanh toán...')
+      router.push(`/app/payment/${invoiceId}`)
+    } else {
+      ElMessage.warning('Tạo hóa đơn thành công nhưng không tìm thấy mã hóa đơn để quét QR.')
+      load()
+    }
+  } catch {
+    ElMessage.error('Có lỗi xảy ra trong quá trình tạo hóa đơn thanh toán.')
+  } finally {
+    purchasing.value = false
+  }
 }
 
 function payBadge(s) { return { PAID:'badge-success', PENDING:'badge-warning', FAILED:'badge-danger', REFUNDED:'badge-info' }[s]||'' }
