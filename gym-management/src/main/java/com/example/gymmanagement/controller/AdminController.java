@@ -1,6 +1,7 @@
 package com.example.gymmanagement.controller;
 
 import com.example.gymmanagement.dto.response.*;
+import com.example.gymmanagement.dto.request.CancellationDecisionRequest;
 import com.example.gymmanagement.dto.request.WorkoutTemplateRequest;
 import com.example.gymmanagement.entity.*;
 import com.example.gymmanagement.enums.PaymentStatus;
@@ -32,6 +33,8 @@ public class AdminController {
     private final WorkoutPlanDayRepository workoutPlanDayRepository;
     private final UserProfileService userProfileService;
     private final BCryptPasswordEncoder passwordEncoder;
+    private final InvoiceService invoiceService;
+    private final MembershipCancellationService cancellationService;
 
     // ─── Dashboard ───────────────────────────────────────────
     @GetMapping("/dashboard")
@@ -141,6 +144,47 @@ public class AdminController {
         List<MembershipResponse> list = membershipRepository.findByUserIdOrderByCreatedAtDesc(userId)
                 .stream().map(membershipService::buildResponse).collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.success(list));
+    }
+
+    // ─── Invoices (MoMo) ──────────────────────────────────────
+    @GetMapping("/invoices")
+    public ResponseEntity<ApiResponse<List<InvoiceResponse>>> getAllInvoices() {
+        return ResponseEntity.ok(ApiResponse.success(invoiceService.getAllInvoices()));
+    }
+
+    // ─── Membership Cancellation Requests (TH3 phía user) ─────
+    @GetMapping("/cancellation-requests")
+    public ResponseEntity<ApiResponse<List<CancellationRequestResponse>>> getAllCancellationRequests() {
+        return ResponseEntity.ok(ApiResponse.success(cancellationService.getAllRequests()));
+    }
+
+    @GetMapping("/cancellation-requests/pending")
+    public ResponseEntity<ApiResponse<List<CancellationRequestResponse>>> getPendingCancellationRequests() {
+        return ResponseEntity.ok(ApiResponse.success(cancellationService.getPendingRequests()));
+    }
+
+    // TH1: Hủy gói tập thành công
+    @PostMapping("/cancellation-requests/{id}/approve")
+    public ResponseEntity<ApiResponse<CancellationRequestResponse>> approveCancellation(
+            org.springframework.security.core.Authentication authentication,
+            @PathVariable Long id,
+            @RequestBody(required = false) CancellationDecisionRequest body) {
+        String note = body != null ? body.getAdminNote() : null;
+        return ResponseEntity.ok(ApiResponse.success(
+                cancellationService.approve(id, authentication.getName(), note),
+                "Đã duyệt hủy gói và hoàn tiền cho user"));
+    }
+
+    // TH2: Hủy gói tập thất bại (từ chối)
+    @PostMapping("/cancellation-requests/{id}/reject")
+    public ResponseEntity<ApiResponse<CancellationRequestResponse>> rejectCancellation(
+            org.springframework.security.core.Authentication authentication,
+            @PathVariable Long id,
+            @RequestBody(required = false) CancellationDecisionRequest body) {
+        String note = body != null ? body.getAdminNote() : null;
+        return ResponseEntity.ok(ApiResponse.success(
+                cancellationService.reject(id, authentication.getName(), note),
+                "Đã từ chối yêu cầu hủy gói"));
     }
 
     // ─── Revenue / Statistics ─────────────────────────────────
