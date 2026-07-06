@@ -11,7 +11,4 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findByStatusTrue();
     @Query("SELECT u FROM User u WHERE u.role.roleName = 'ROLE_USER' AND u.status = true")
     List<User> findAllActiveUsers();
-
-    @Query("SELECT u FROM User u WHERE u.role.roleName = 'ROLE_ADMIN' AND u.status = true")
-    List<User> findAllAdmins();
 }

@@ -103,15 +103,6 @@ const router = createRouter({
                         import('@/views/user/MembershipView.vue')
                 },
 
-                // 📌 THÊM VÀO ĐÂY: Màn hình quét QR dành cho khách hàng
-                // Đường dẫn thực tế sẽ là: /app/payment/:invoiceId
-                {
-                    path: 'payment/:invoiceId',
-                    name: 'UserPaymentQR',
-                    component: () =>
-                        import('@/views/user/PaymentQR.vue') // Đảm bảo bạn lưu file PaymentQR.vue vào mục src/views/user/ nhé
-                },
-
                 {
                     path: 'exercises',
                     name: 'Exercises',
@@ -124,6 +115,13 @@ const router = createRouter({
                     name: 'Ratings',
                     component: () =>
                         import('@/views/user/RatingsView.vue')
+                },
+
+                {
+                    path: 'chat',
+                    name: 'Chat',
+                    component: () =>
+                        import('@/views/user/ChatView.vue')
                 }
             ]
         },
@@ -169,15 +167,6 @@ const router = createRouter({
                         import('@/views/admin/MembershipsView.vue')
                 },
 
-                // 📌 THÊM VÀO ĐÂY: Màn hình Duyệt hủy gói cho Admin
-                // Đường dẫn thực tế sẽ là: /admin/approve-cancellation
-                {
-                    path: 'approve-cancellation',
-                    name: 'AdminApproveCancellation',
-                    component: () =>
-                        import('@/views/admin/AdminApproval.vue') // Đảm bảo bạn lưu file AdminApproval.vue vào mục src/views/admin/ nhé
-                },
-
                 {
                     path: 'exercises',
                     name: 'AdminExercises',
@@ -197,6 +186,13 @@ const router = createRouter({
                     name: 'AdminRatings',
                     component: () =>
                         import('@/views/admin/AdminRatingsView.vue')
+                },
+
+                {
+                    path: 'support',
+                    name: 'AdminSupport',
+                    component: () =>
+                        import('@/views/admin/SupportView.vue')
                 },
 
                 {

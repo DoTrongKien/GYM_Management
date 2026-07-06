@@ -37,51 +37,6 @@ public class MembershipService {
             MembershipType.VIP, 12
     );
 
-    public double getPrice(MembershipType type) {
-        return PRICES.getOrDefault(type, 299000.0);
-    }
-
-    public int getDurationMonths(MembershipType type) {
-        return DURATIONS_MONTHS.getOrDefault(type, 1);
-    }
-
-    /**
-     * Dùng bởi InvoiceService: khi MoMo IPN xác nhận PAID, tạo thẳng 1 Membership
-     * ở trạng thái PAID/active (khác với purchase() cũ luôn tạo PENDING).
-     * Gói active cũ (nếu có) bị vô hiệu hóa nhưng KHÔNG xóa, để có thể khôi phục lại
-     * khi user hủy gói mới trong thời hạn cho phép (xem MembershipCancellationService).
-     */
-    @Transactional
-    public Membership activatePaidMembership(User user, MembershipType type, String transactionId, String paymentMethod) {
-        membershipRepository.findByUserIdAndIsActiveTrue(user.getId()).ifPresent(m -> {
-            m.setIsActive(false);
-            membershipRepository.save(m);
-        });
-
-        LocalDate start = LocalDate.now();
-        int months = getDurationMonths(type);
-        LocalDate end = start.plusMonths(months);
-
-        Membership membership = Membership.builder()
-                .user(user)
-                .membershipType(type)
-                .startDate(start)
-                .endDate(end)
-                .price(getPrice(type))
-                .isActive(true)
-                .paymentStatus(PaymentStatus.PAID)
-                .paymentMethod(paymentMethod)
-                .transactionId(transactionId)
-                .paidAt(LocalDateTime.now())
-                .build();
-        membershipRepository.save(membership);
-
-        emailService.sendMembershipConfirmation(
-                user.getEmail(), user.getFullName(), type.name(), end.toString());
-
-        return membership;
-    }
-
     @Transactional
     public MembershipResponse purchase(String email, MembershipRequest request) {
         User user = userRepository.findByEmail(email)

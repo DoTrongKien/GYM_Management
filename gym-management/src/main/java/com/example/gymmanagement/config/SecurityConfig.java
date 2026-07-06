@@ -55,10 +55,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/exercises").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/ratings/public").permitAll()
-
-                        // MoMo / SePay gọi server-to-server, không có JWT của user -> phải mở public
-                        .requestMatchers("/api/momo/**").permitAll()
-                        .requestMatchers("/api/bank/webhook/**").permitAll()
+                        // File đính kèm phục vụ tĩnh (tên UUID không đoán được)
+                        .requestMatchers(HttpMethod.GET, "/api/files/**").permitAll()
 
                         // Admin only
                         .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")

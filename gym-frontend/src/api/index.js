@@ -3,13 +3,14 @@ import { ElMessage } from 'element-plus'
 
 const api = axios.create({
     baseURL: '/api',
-    timeout: 15000,
-    headers: { 'Content-Type': 'application/json' }
+    timeout: 15000
+    // Không đặt Content-Type mặc định: axios tự đặt application/json cho payload JSON
+    // và multipart/form-data (kèm boundary) cho FormData khi upload file.
 })
 
 // Request interceptor — attach JWT
 api.interceptors.request.use(config => {
-    const token = localStorage.getItem('token')
+    const token = sessionStorage.getItem('token')
     if (token) config.headers.Authorization = `Bearer ${token}`
     return config
 })
@@ -20,7 +21,7 @@ api.interceptors.response.use(
     err => {
         const msg = err.response?.data?.message || 'Lỗi kết nối server'
         if (err.response?.status === 401) {
-            localStorage.clear()
+            sessionStorage.clear()
             window.location.href = '/login'
         } else if (err.response?.status !== 404) {
             ElMessage.error(msg)
@@ -89,15 +90,6 @@ export const membershipAPI = {
     confirmPayment: (id, txId) => api.post(`/memberships/${id}/confirm-payment`, { transactionId: txId })
 }
 
-// ── Invoices (MoMo QR) ─────────────────────────
-export const invoiceAPI = {
-    create:        (membershipType) => api.post('/invoices', { membershipType }),
-    getAll:        ()   => api.get('/invoices'),
-    getOne:        (id) => api.get(`/invoices/${id}`),
-    regenerateQr:  (id) => api.post(`/invoices/${id}/regenerate-qr`),
-    cancel:        (id) => api.post(`/invoices/${id}/cancel`)
-}
-
 // ── Nutrition ─────────────────────────────────
 export const nutritionAPI = {
     generate:   ()  => api.post('/nutrition/generate'),
@@ -123,6 +115,36 @@ export const ratingAPI = {
     // Admin
     getAll:       ()             => api.get('/ratings/admin/all'),
     adminReply:   (id, reply)    => api.post(`/ratings/admin/${id}/reply`, { reply })
+}
+
+// ── Chat với bot ──────────────────────────────
+export const chatAPI = {
+    send:        (message)  => api.post('/chat', { message }),
+    sendFile:    (formData) => api.post('/chat/attachments', formData, { timeout: 120000 }),
+    getHistory:  ()         => api.get('/chat/history'),
+    suggestions: ()         => api.get('/chat/suggestions'),
+    clear:       ()         => api.delete('/chat/history')
+}
+
+// ── Chat với admin (User) ─────────────────────
+export const supportAPI = {
+    request:   (subject)     => api.post('/support/request', { subject }),
+    sessions:  ()            => api.get('/support/sessions'),
+    messages:  (id)          => api.get(`/support/sessions/${id}/messages`),
+    send:      (id, content) => api.post(`/support/sessions/${id}/messages`, { content }),
+    sendFile:  (id, formData)=> api.post(`/support/sessions/${id}/attachments`, formData, { timeout: 120000 }),
+    close:     (id)          => api.post(`/support/sessions/${id}/close`)
+}
+
+// ── Chat với user (Admin) ─────────────────────
+export const adminSupportAPI = {
+    sessions: ()             => api.get('/admin/support/sessions'),
+    accept:   (id)           => api.post(`/admin/support/${id}/accept`),
+    reject:   (id)           => api.post(`/admin/support/${id}/reject`),
+    close:    (id)           => api.post(`/admin/support/${id}/close`),
+    messages: (id)           => api.get(`/admin/support/${id}/messages`),
+    send:     (id, content)  => api.post(`/admin/support/${id}/messages`, { content }),
+    sendFile: (id, formData) => api.post(`/admin/support/${id}/attachments`, formData, { timeout: 120000 })
 }
 
 // ── Notifications ─────────────────────────────
