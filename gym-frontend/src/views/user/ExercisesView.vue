@@ -66,7 +66,7 @@
         </el-descriptions-item>
         <el-descriptions-item label="Calories/set">{{ sel.caloriesBurned || '--' }} kcal</el-descriptions-item>
         <el-descriptions-item label="Nghỉ">{{ sel.restSeconds || '--' }}s</el-descriptions-item>
-        <el-descriptions-item label="Mô tả" :span="2">{{ sel.description || 'Chưa có mô tả' }}</el-descriptions-item>
+        <el-descriptions-item label="Động tác" :span="2">{{ sel.description || 'Chưa có chi tiết động tác' }}</el-descriptions-item>
       </el-descriptions>
     </el-dialog>
   </div>

@@ -52,7 +52,7 @@
         <el-form-item label="Tên bài tập">
           <el-input v-model="form.name" placeholder="VD: Bench Press"/>
         </el-form-item>
-        <el-form-item label="Mô tả">
+        <el-form-item label="Động tác">
           <el-input v-model="form.description" type="textarea" :rows="2"/>
         </el-form-item>
         <div class="grid-2">
