@@ -14,6 +14,12 @@
         <el-menu-item index="/admin/exercises"><el-icon><Trophy/></el-icon><template #title>Bài tập</template></el-menu-item>
         <el-menu-item index="/admin/plans"><el-icon><Calendar/></el-icon><template #title>Giáo án</template></el-menu-item>
         <el-menu-item index="/admin/ratings"><el-icon><Star/></el-icon><template #title>Đánh giá</template></el-menu-item>
+        <el-menu-item index="/admin/support">
+          <el-badge :value="pendingCount" :max="9" :hidden="!pendingCount" class="menu-badge">
+            <el-icon><ChatDotRound/></el-icon>
+          </el-badge>
+          <template #title>Hỗ trợ chat</template>
+        </el-menu-item>
         <el-menu-item index="/admin/notify"><el-icon><Bell/></el-icon><template #title>Thông báo</template></el-menu-item>
       </el-menu>
 
@@ -53,14 +59,88 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, h, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { adminSupportAPI } from '@/api'
+import { ElNotification, ElButton, ElMessage } from 'element-plus'
 
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const collapsed = ref(false)
+
+// ── Thông báo yêu cầu hỗ trợ mới ─────────────────
+const pendingCount = ref(0)
+const seenPending = new Set()      // id các yêu cầu đã hiển thị thông báo
+const notifs = new Map()           // id -> instance thông báo đang mở
+let firstLoad = true
+let supportTimer = null
+
+async function pollSupport() {
+  try {
+    const res = await adminSupportAPI.sessions()
+    const list = res.data || []
+    const pend = list.filter(s => s.status === 'PENDING')
+    pendingCount.value = pend.length
+    const pendIds = new Set(pend.map(s => s.id))
+
+    // Yêu cầu mới → bật popup (bỏ qua lần tải đầu để tránh spam)
+    pend.forEach(s => {
+      if (!seenPending.has(s.id)) {
+        seenPending.add(s.id)
+        if (!firstLoad) notifyNewRequest(s)
+      }
+    })
+    // Dọn các yêu cầu không còn chờ (đã được xử lý ở nơi khác)
+    seenPending.forEach(id => { if (!pendIds.has(id)) seenPending.delete(id) })
+    notifs.forEach((inst, id) => { if (!pendIds.has(id)) { inst.close(); notifs.delete(id) } })
+
+    firstLoad = false
+  } catch {}
+}
+
+function notifyNewRequest(s) {
+  const inst = ElNotification({
+    title: 'Yêu cầu hỗ trợ mới',
+    type: 'warning',
+    duration: 0,               // giữ lại đến khi admin xử lý
+    customClass: 'support-notify',
+    onClose: () => notifs.delete(s.id),
+    message: h('div', {}, [
+      h('div', { style: 'margin-bottom:10px; line-height:1.5' }, [
+        h('b', {}, s.userName || s.userEmail || 'Người dùng'),
+        ' cần hỗ trợ về: ',
+        h('i', {}, `“${s.subject || 'Hỗ trợ'}”`)
+      ]),
+      h('div', { style: 'display:flex; gap:8px' }, [
+        h(ElButton, {
+          type: 'success', size: 'small',
+          onClick: async () => { await acceptReq(s.id); inst.close() }
+        }, () => 'Chấp nhận'),
+        h(ElButton, {
+          type: 'danger', size: 'small', plain: true,
+          onClick: async () => { await rejectReq(s.id); inst.close() }
+        }, () => 'Từ chối'),
+        h(ElButton, {
+          size: 'small', text: true,
+          onClick: () => { router.push('/admin/support'); inst.close() }
+        }, () => 'Mở trang')
+      ])
+    ])
+  })
+  notifs.set(s.id, inst)
+}
+
+async function acceptReq(id) {
+  try { await adminSupportAPI.accept(id); ElMessage.success('Đã chấp nhận yêu cầu'); pollSupport() } catch {}
+}
+async function rejectReq(id) {
+  try { await adminSupportAPI.reject(id); ElMessage.info('Đã từ chối yêu cầu'); pollSupport() } catch {}
+}
+
+onMounted(() => { pollSupport(); supportTimer = setInterval(pollSupport, 5000) })
+onUnmounted(() => { if (supportTimer) clearInterval(supportTimer) })
 </script>
 
 <style scoped>
@@ -105,4 +185,10 @@ const collapsed = ref(false)
 .page-content { flex:1; overflow-y:auto; padding:28px; background:var(--c-bg); }
 .page-enter-active,.page-leave-active { transition:opacity 0.2s; }
 .page-enter-from,.page-leave-to { opacity:0; }
+
+/* Badge số yêu cầu hỗ trợ chờ trên menu item */
+.sidebar-menu .el-menu-item .menu-badge { display:inline-flex; align-items:center; }
+.sidebar-menu .el-menu-item .menu-badge :deep(.el-badge__content) {
+  top:4px; right:4px; border:none; font-family:var(--font-mono); font-size:0.62rem;
+}
 </style>

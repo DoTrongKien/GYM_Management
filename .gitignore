@@ -1,2 +1,24 @@
-*.db 
-node_modules/ 
+# Dependencies
+node_modules/
+
+# Build output
+target/
+dist/
+build/
+
+# Database H2
+*.db
+
+# File đính kèm chat (sinh ra khi chạy)
+uploads/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Log
+*.log

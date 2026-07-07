@@ -16,6 +16,7 @@
         <el-menu-item index="/app/membership"><el-icon><CreditCard/></el-icon><template #title>Gói tập</template></el-menu-item>
         <el-menu-item index="/app/exercises"><el-icon><Trophy/></el-icon><template #title>Bài tập</template></el-menu-item>
         <el-menu-item index="/app/ratings"><el-icon><Star/></el-icon><template #title>Đánh giá</template></el-menu-item>
+        <el-menu-item index="/app/chat"><el-icon><ChatDotRound/></el-icon><template #title>Trợ lý</template></el-menu-item>
       </el-menu>
 
       <div class="sidebar-bottom">
@@ -70,6 +71,7 @@ const titles = {
   '/app/plan':'Giáo án tập', '/app/sessions':'Lịch sử buổi tập',
   '/app/progress':'Theo dõi tiến độ', '/app/nutrition':'Dinh dưỡng',
   '/app/membership':'Gói tập', '/app/exercises':'Thư viện bài tập', '/app/ratings':'Đánh giá',
+  '/app/chat':'Trợ lý',
 }
 const pageTitle = computed(() => titles[route.path] || 'GymPro')
 </script>

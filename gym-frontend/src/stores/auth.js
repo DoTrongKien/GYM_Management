@@ -46,7 +46,7 @@ export const useAuthStore = defineStore('auth', () => {
   // Lấy token
   // ───────────────────────────────────────────
   const token = ref(
-      localStorage.getItem('token') || ''
+      sessionStorage.getItem('token') || ''
   )
 
   // ───────────────────────────────────────────
@@ -55,7 +55,7 @@ export const useAuthStore = defineStore('auth', () => {
   let storedUser = null
 
   try {
-    const rawUser = localStorage.getItem('user')
+    const rawUser = sessionStorage.getItem('user')
 
     storedUser =
         rawUser &&
@@ -78,8 +78,8 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = ''
     user.value = null
 
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+    sessionStorage.removeItem('token')
+    sessionStorage.removeItem('user')
   }
 
   // ───────────────────────────────────────────
@@ -140,10 +140,10 @@ export const useAuthStore = defineStore('auth', () => {
         emailVerified: authData.emailVerified
       }
 
-      // Save localStorage
-      localStorage.setItem('token', token.value)
+      // Save sessionStorage
+      sessionStorage.setItem('token', token.value)
 
-      localStorage.setItem(
+      sessionStorage.setItem(
           'user',
           JSON.stringify(user.value)
       )
@@ -199,9 +199,9 @@ export const useAuthStore = defineStore('auth', () => {
         emailVerified: authData.emailVerified
       }
 
-      localStorage.setItem('token', token.value)
+      sessionStorage.setItem('token', token.value)
 
-      localStorage.setItem(
+      sessionStorage.setItem(
           'user',
           JSON.stringify(user.value)
       )
@@ -235,8 +235,8 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = ''
     user.value = null
 
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+    sessionStorage.removeItem('token')
+    sessionStorage.removeItem('user')
   }
 
   return {
