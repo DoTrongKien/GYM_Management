@@ -74,6 +74,10 @@ export const sessionAPI = {
     getWeekProgress: (planId, weekNumber) => api.get(`/sessions/week-progress?planId=${planId}&weekNumber=${weekNumber}`)
 }
 
+export const petAPI = {
+    get: () => api.get('/pet')
+}
+
 // ── Progress ──────────────────────────────────
 export const progressAPI = {
     getAll:   ()       => api.get('/progress'),

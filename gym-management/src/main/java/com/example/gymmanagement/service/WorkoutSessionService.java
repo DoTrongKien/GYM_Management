@@ -5,6 +5,7 @@ import com.example.gymmanagement.dto.response.*;
 import com.example.gymmanagement.entity.*;
 import com.example.gymmanagement.enums.ProgressSource;
 import com.example.gymmanagement.enums.SessionStatus;
+import com.example.gymmanagement.pet.PetService;
 import com.example.gymmanagement.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,11 @@ public class WorkoutSessionService {
     @org.springframework.beans.factory.annotation.Autowired
     public void setWorkoutPlanService(@Lazy WorkoutPlanService workoutPlanService) {
         this.workoutPlanService = workoutPlanService;
+    }
+    private PetService petService;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setPetService(@Lazy PetService petService) {
+        this.petService = petService;
     }
 
     // ── Đăng ký buổi tập ─────────────────────────────────────
@@ -281,6 +287,8 @@ public class WorkoutSessionService {
                     nextMsg, "SYSTEM");
         }
 
+        try { petService.recalculate(email); } catch (Exception ignored) {}
+
         return buildResponse(s);
     }
 
@@ -289,6 +297,9 @@ public class WorkoutSessionService {
         WorkoutSession s = getOwned(email, id);
         s.setStatus(SessionStatus.SKIPPED); s.setNotes(notes);
         sessionRepo.save(s);
+
+        try { petService.recalculate(email); } catch (Exception ignored) {}
+
         return buildResponse(s);
     }
 
