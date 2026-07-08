@@ -31,4 +31,6 @@ public class WorkoutSessionResponse {
     private Double  checkoutBodyFat;
     private List<ExerciseLogResponse>         exerciseLogs;
     private List<WorkoutPlanExerciseResponse> planExercises;
+
+    private Boolean injuryRisk; // true nếu buổi tập vừa checkout vượt quá mana hiện có
 }

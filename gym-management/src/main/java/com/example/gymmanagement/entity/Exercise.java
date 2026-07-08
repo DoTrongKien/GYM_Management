@@ -4,6 +4,7 @@ import com.example.gymmanagement.enums.Difficulty;
 import com.example.gymmanagement.enums.MuscleGroup;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.ColumnDefault;
 
 @Entity
 @Table(name = "exercises")
@@ -31,21 +32,25 @@ public class Exercise {
     private Integer restSeconds;
 
     // ── Chỉ số benefit cho từng mục tiêu (0-10) ─────────────────
-    // Điểm càng cao = bài tập càng phù hợp với mục tiêu đó
     @Builder.Default
-    private Integer muscleGainScore   = 0;  // điểm tăng cơ
+    private Integer muscleGainScore   = 0;
 
     @Builder.Default
-    private Integer weightLossScore   = 0;  // điểm giảm cân
+    private Integer weightLossScore   = 0;
 
     @Builder.Default
-    private Integer enduranceScore    = 0;  // điểm sức bền
+    private Integer enduranceScore    = 0;
 
     @Builder.Default
-    private Integer flexibilityScore  = 0;  // điểm linh hoạt
+    private Integer flexibilityScore  = 0;
 
     @Builder.Default
-    private Integer maintenanceScore  = 0;  // điểm duy trì
+    private Integer maintenanceScore  = 0;
+
+    // ── MỚI: Thể lực (mana) tiêu hao khi tập bài này với completionPercent=100 ──
+    @ColumnDefault("10")
+    @Builder.Default
+    private Integer staminaCost = 10;
 
     @Builder.Default
     private Boolean isActive = true;

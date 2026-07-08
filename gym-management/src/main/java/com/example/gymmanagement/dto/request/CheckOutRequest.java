@@ -1,15 +1,13 @@
 package com.example.gymmanagement.dto.request;
-import lombok.*;
 
-@Data @NoArgsConstructor @AllArgsConstructor
+import lombok.Data;
+import java.util.List;
+
+@Data
 public class CheckOutRequest {
-    // Bắt buộc: tỉ lệ hoàn thành 0-100
-    private Integer completionRate;
-    private String  notes;
-
-    // Chỉ bắt buộc nếu là buổi cuối tuần
-    private Double  checkoutWeight;
-    private Double  checkoutBodyFat;
-
-    private java.util.List<com.example.gymmanagement.dto.request.ExerciseLogRequest> exerciseLogs;
+    // ĐÃ BỎ: completionRate (Integer) - giờ tính tự động từ exerciseLogs
+    private Double checkoutWeight;
+    private Double checkoutBodyFat;
+    private String notes;
+    private List<ExerciseLogRequest> exerciseLogs;
 }

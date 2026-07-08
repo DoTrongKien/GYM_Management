@@ -1,12 +1,14 @@
 package com.example.gymmanagement.dto.request;
-import lombok.*;
-@Data @NoArgsConstructor @AllArgsConstructor
+
+import lombok.Data;
+
+@Data
 public class ExerciseLogRequest {
     private Long exerciseId;
-    private Integer setsCompleted;
-    private Integer repsCompleted;
-    private Integer durationSeconds;
+
+    // MỚI: thay cho isCompleted boolean cũ
+    private Integer completionPercent; // 0/25/50/75/100
+
     private Double weightUsedKg;
-    private Boolean isCompleted;
     private String notes;
 }

@@ -25,12 +25,11 @@ public class WorkoutPlanService {
     private final UserProfileRepository     profileRepo;
     private final WorkoutSessionRepository  sessionRepo;
     private final FitnessCalculator fitnessCalculator;
+    // ── MỚI ──
+    private final WorkoutPlanExerciseRepository planExerciseRepo;
 
     // ─────────────────────────────────────────────────────────
-    // 1. Tạo giáo án AI với mục tiêu tuỳ chọn
-    // ─────────────────────────────────────────────────────────
-    // ─────────────────────────────────────────────────────────
-    // 1. generateAIPlanWithGoal — FS + BodyType + Level + Goal
+    // 1. generateAIPlanWithGoal — FS + BodyType + Level + Goal + Mana
     // ─────────────────────────────────────────────────────────
     @Transactional
     public WorkoutPlanResponse generateAIPlanWithGoal(String email, Goal goal,
@@ -38,7 +37,6 @@ public class WorkoutPlanService {
         User user = getUser(email);
         UserProfile profile = profileRepo.findByUserId(user.getId()).orElse(null);
 
-        // Level: user tự chọn trong dialog (levelParam), fallback profile, fallback BEGINNER
         FitnessLevel level = levelParam != null ? levelParam
                 : (profile != null && profile.getFitnessLevel() != null
                    ? profile.getFitnessLevel() : FitnessLevel.BEGINNER);
@@ -48,20 +46,21 @@ public class WorkoutPlanService {
         Double startBmi    = profile != null ? profile.getBmi()    : null;
         Double startWeight = profile != null ? profile.getWeight() : null;
 
-        // Tính FS từ chỉ số cơ thể (đóng băng trong suốt giáo án)
         double fs = (profile != null && profile.getAge() != null
                 && profile.getHeight() != null && profile.getWeight() != null)
                 ? fitnessCalculator.calculateFS(profile.getAge(), profile.getHeight(), profile.getWeight())
-                : 60.0; // default AVERAGE nếu thiếu thông tin
+                : 60.0;
 
         FitnessCalculator.FsLevel fsLevel = fitnessCalculator.getFsLevel(fs);
 
-        // Phân loại thể trạng (BodyType) từ chỉ số cơ thể
         FitnessCalculator.BodyType bodyType = (profile != null)
                 ? fitnessCalculator.classifyBodyType(profile.getHeight(), profile.getWeight(), startBmi)
                 : FitnessCalculator.BodyType.CAN_DOI;
 
         deactivateAndCleanOldPlan(user.getId());
+
+        // ── MỚI: Quy đổi FS (0-100) sang Mana (0-200) ──
+        int maxMana = (int) Math.round(fs * 2);
 
         WorkoutPlan plan = WorkoutPlan.builder()
                 .user(user)
@@ -71,6 +70,8 @@ public class WorkoutPlanService {
                 .durationWeeks(6).sessionsPerWeek(daysPerWeek).currentWeek(1)
                 .startingBmi(startBmi).startingWeight(startWeight)
                 .isActive(true).isAiGenerated(true)
+                .maxMana(maxMana)
+                .currentMana(maxMana)
                 .build();
         planRepo.save(plan);
 
@@ -101,141 +102,9 @@ public class WorkoutPlanService {
             return toPlanResponse(p, profile);
         }).collect(Collectors.toList());
     }
-//    // đoạn cũ vẫn còn 1 số ý tưởng hay tạm giữ lại
-//    // ─────────────────────────────────────────────────────────
-//    // 3. Adaptive adjustment sau mỗi tuần
-//    // ─────────────────────────────────────────────────────────
-//    @Transactional
-//    public WorkoutPlanResponse adjustPlanAfterWeek(Long planId, String email,
-//                                                   Double newWeight, Double newBodyFat) {
-//        User user = getUser(email);
-//        WorkoutPlan plan = planRepo.findById(planId)
-//                .orElseThrow(() -> new RuntimeException("Plan not found"));
-//
-//        int week = plan.getCurrentWeek() != null ? plan.getCurrentWeek() : 1;
-//
-//        Double avgRate = sessionRepo.avgCompletionRateInWeek(user.getId(), planId, week);
-//        long completed = sessionRepo.countCompletedInWeek(user.getId(), planId, week);
-//        int target = plan.getSessionsPerWeek();
-//
-//        // Cập nhật cân nặng
-//        if (newWeight != null) {
-//            plan.setStartingWeight(newWeight);
-//            UserProfile profile = profileRepo.findByUserId(user.getId()).orElse(null);
-//            if (profile != null) {
-//                profile.setWeight(newWeight);
-//                if (profile.getHeight() != null && profile.getHeight() > 0) {
-//                    double heightM = profile.getHeight() / 100.0;
-//                    profile.setBmi(newWeight / (heightM * heightM));
-//                    plan.setStartingBmi(profile.getBmi());
-//                }
-//                profileRepo.save(profile);
-//            }
-//        }
-//
-//        int setsAdj = plan.getSetsAdjustment() != null ? plan.getSetsAdjustment() : 0;
-//        int repsAdj = plan.getRepsAdjustment() != null ? plan.getRepsAdjustment() : 0;
-//        int diffAdj = plan.getDifficultyAdjustment() != null ? plan.getDifficultyAdjustment() : 0;
-//        FitnessLevel currentLevel = plan.getTargetLevel() != null ? plan.getTargetLevel() : FitnessLevel.BEGINNER;
-//
-//        String adjustMsg = "";
-//        boolean isStructureChanged = false;
-//
-//        if (avgRate != null) {
-//            if (avgRate < 50) {
-//                if (currentLevel == FitnessLevel.ADVANCED) {
-//                    plan.setTargetLevel(FitnessLevel.INTERMEDIATE);
-//                    adjustMsg = "📉 Giáo án quá sức (<50%). Hạ từ Nâng cao xuống Trung bình và giảm số bài tập.";
-//                } else if (currentLevel == FitnessLevel.INTERMEDIATE) {
-//                    plan.setTargetLevel(FitnessLevel.BEGINNER);
-//                    adjustMsg = "📉 Giáo án quá sức (<50%). Hạ từ Trung bình xuống Mới bắt đầu và giảm số bài tập.";
-//                } else {
-//                    setsAdj = Math.max(setsAdj - 1, -2);
-//                    repsAdj = Math.max(repsAdj - 2, -4);
-//                    diffAdj = Math.max(diffAdj - 1, -2);
-//                    adjustMsg = "📉 Mức Beginner: Giảm Sets/Reps và độ khó.";
-//                }
-//                isStructureChanged = true;
-//            } else if (avgRate >= 50 && avgRate <= 80) {
-//                adjustMsg = "✅ Hoàn thành ổn định (" + Math.round(avgRate) + "%). Giữ nguyên.";
-//            } else if (avgRate > 80) {
-//                if (currentLevel == FitnessLevel.BEGINNER) {
-//                    plan.setTargetLevel(FitnessLevel.INTERMEDIATE);
-//                    adjustMsg = "🚀 Hoàn thành xuất sắc! Nâng lên Trung bình.";
-//                } else if (currentLevel == FitnessLevel.INTERMEDIATE) {
-//                    plan.setTargetLevel(FitnessLevel.ADVANCED);
-//                    adjustMsg = "🚀 Hoàn thành xuất sắc! Nâng lên Nâng cao.";
-//                } else {
-//                    setsAdj = Math.min(setsAdj + 1, 3);
-//                    repsAdj = Math.min(repsAdj + 2, 6);
-//                    diffAdj = Math.min(diffAdj + 1, 2);
-//                    adjustMsg = "🔥 Nâng cao xuất sắc! Tăng Sets/Reps.";
-//                }
-//                isStructureChanged = true;
-//            }
-//        }
-//
-//        plan.setSetsAdjustment(setsAdj);
-//        plan.setRepsAdjustment(repsAdj);
-//        plan.setDifficultyAdjustment(diffAdj);
-//        plan.setCurrentWeek(week + 1);
-//
-//        if (completed < target) {
-//            plan.setDurationWeeks(plan.getDurationWeeks() + 1);
-//            adjustMsg += " 📅 Gia hạn thêm 1 tuần.";
-//        }
-//
-//        // ==================== PHẦN SỬA LỖI QUAN TRỌNG ====================
-//        if (isStructureChanged) {
-//            // 1. Xóa các WorkoutSession liên quan đến PlanDay cũ trước
-//            List<WorkoutPlanDay> oldDays = dayRepo.findByWorkoutPlanIdOrderByDayOfWeek(planId);
-//            if (oldDays != null && !oldDays.isEmpty()) {
-//                // Xóa session trước để tránh vi phạm foreign key
-//                sessionRepo.deleteByPlanDayIds(oldDays.stream().map(WorkoutPlanDay::getId).collect(Collectors.toList()));
-//
-//                // Sau đó mới xóa PlanDay
-//                dayRepo.deleteAll(oldDays);
-//            }
-//
-//            // 2. Tạo ngày + bài tập mới
-//            List<WorkoutPlanDay> newDays = buildPlanDays(plan, plan.getGoal(),
-//                    plan.getTargetLevel(), plan.getSessionsPerWeek(), setsAdj, repsAdj);
-//
-//            for (WorkoutPlanDay day : newDays) {
-//                day.setWorkoutPlan(plan);
-//                if (day.getExercises() != null) {
-//                    for (WorkoutPlanExercise pe : day.getExercises()) {
-//                        pe.setPlanDay(day);
-//                        if (pe.getSets() != null) pe.setSets(Math.max(2, pe.getSets() + setsAdj));
-//                        if (pe.getReps() != null) pe.setReps(Math.max(4, pe.getReps() + repsAdj));
-//                    }
-//                }
-//            }
-//
-//            List<WorkoutPlanDay> savedDays = dayRepo.saveAll(newDays);
-//            plan.setPlanDays(savedDays);
-//        } else {
-//            plan.setPlanDays(dayRepo.findByWorkoutPlanIdOrderByDayOfWeek(planId));
-//        }
-//
-//        if (plan.getCurrentWeek() > plan.getDurationWeeks()) {
-//            plan.setIsCompleted(true);
-//            plan.setIsActive(false);
-//        }
-//
-//        WorkoutPlan savedPlan = planRepo.save(plan);
-//        WorkoutPlanResponse resp = toPlanResponse(savedPlan, profileRepo.findByUserId(user.getId()).orElse(null));
-//        resp.setScheduleNote(adjustMsg.isBlank() ? "✅ Giữ nguyên lịch tuần tiếp." : adjustMsg);
-//        return resp;
-//    }
 
-    // bên trên hay có thể áp dụng theo
     // ─────────────────────────────────────────────────────────
-    // 6. adjustPlanAfterWeek — đơn giản hóa
-    //    Không đổi level, không rebuild bài tập.
-    //    Chỉ: tăng currentWeek + gia hạn nếu bỏ buổi.
-    //    weightAdjustmentNote được tính trong WorkoutSessionService.checkOut()
-    //    nên ở đây không cần set lại.
+    // 6. adjustPlanAfterWeek — đơn giản hóa (giữ nguyên logic cũ)
     // ─────────────────────────────────────────────────────────
     @Transactional
     public WorkoutPlanResponse adjustPlanAfterWeek(Long planId, String email,
@@ -248,7 +117,6 @@ public class WorkoutPlanService {
         long completed = sessionRepo.countCompletedInWeek(user.getId(), planId, week);
         int  target    = plan.getSessionsPerWeek();
 
-        // Cập nhật cân nặng vào profile (chỉ lưu, không tính lại giáo án)
         if (newWeight != null) {
             plan.setStartingWeight(newWeight);
             profileRepo.findByUserId(user.getId()).ifPresent(profile -> {
@@ -264,7 +132,6 @@ public class WorkoutPlanService {
             });
         }
 
-        // Gia hạn nếu bỏ buổi
         String note = null;
         if (completed < target) {
             plan.setDurationWeeks(plan.getDurationWeeks() + 1);
@@ -288,14 +155,32 @@ public class WorkoutPlanService {
     }
 
     // ─────────────────────────────────────────────────────────
-    // 4. ADMIN: Tạo template thủ công (chọn bài tập theo từng ngày)
+    // MỚI: Nhập tạ khởi điểm (chỉ 1 lần, tuần đầu)
+    // ─────────────────────────────────────────────────────────
+    @Transactional
+    public WorkoutPlanExerciseResponse setBaseWeight(Long planExerciseId, Double weight) {
+        WorkoutPlanExercise pe = planExerciseRepo.findById(planExerciseId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy bài tập trong giáo án"));
+        if (pe.getBaseWeightKg() != null)
+            throw new RuntimeException("Tạ khởi điểm đã được thiết lập, không thể sửa lại.");
+        if (weight == null || weight < 0)
+            throw new RuntimeException("Giá trị tạ không hợp lệ");
+
+        pe.setBaseWeightKg(weight);
+        pe.setCurrentWeightKg(weight);
+        planExerciseRepo.save(pe);
+        return buildExResponse(pe);
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // 4. ADMIN: Tạo template thủ công
     // ─────────────────────────────────────────────────────────
     @Transactional
     public WorkoutPlanResponse createManualTemplate(WorkoutTemplateRequest req) {
         validateTemplateRequest(req);
 
         WorkoutPlan plan = WorkoutPlan.builder()
-                .user(null)                       // template chưa thuộc về ai
+                .user(null)
                 .planName(req.getPlanName())
                 .description(req.getDescription())
                 .goal(req.getGoal())
@@ -333,7 +218,6 @@ public class WorkoutPlanService {
         plan.setDurationWeeks(req.getDurationWeeks());
         plan.setSessionsPerWeek(req.getDays().size());
 
-        // Xóa exercises + days cũ trước (đúng thứ tự FK như adjustPlanAfterWeek đã làm)
         List<WorkoutPlanDay> oldDays = dayRepo.findByWorkoutPlanIdOrderByDayOfWeek(plan.getId());
         if (oldDays != null && !oldDays.isEmpty()) {
             sessionRepo.deleteByPlanDayIds(oldDays.stream().map(WorkoutPlanDay::getId).collect(Collectors.toList()));
@@ -383,7 +267,6 @@ public class WorkoutPlanService {
         List<WorkoutPlanDay> templateDays = dayRepo.findByWorkoutPlanIdOrderByDayOfWeek(template.getId());
         UserProfile profile = profileRepo.findByUserId(user.getId()).orElse(null);
 
-        // Tắt plan active cũ của user (nếu có) — giống logic generate AI
         deactivateAndCleanOldPlan(user.getId());
 
         WorkoutPlan newPlan = WorkoutPlan.builder()
@@ -400,6 +283,7 @@ public class WorkoutPlanService {
                 .isActive(true)
                 .isAiGenerated(false)
                 .isTemplate(false)
+                // Template không dùng hệ thống mana AI -> để null, ManaService sẽ tự bỏ qua
                 .build();
         planRepo.save(newPlan);
 
@@ -483,7 +367,7 @@ public class WorkoutPlanService {
     }
 
     // ─────────────────────────────────────────────────────────
-    // Các hàm hỗ trợ
+    // Các hàm hỗ trợ — GIỮ NGUYÊN toàn bộ logic gốc
     // ─────────────────────────────────────────────────────────
     private int calcSessionsPerWeek(Goal goal, Integer requested, UserProfile profile) {
         int fromProfile = (profile != null && profile.getAvailableDaysPerWeek() != null)
@@ -508,9 +392,6 @@ public class WorkoutPlanService {
         return level;
     }
 
-    // ─────────────────────────────────────────────────────────
-    // 2. buildPlanDaysNew — truyền level + fsLevel + bodyType
-    // ─────────────────────────────────────────────────────────
     private List<WorkoutPlanDay> buildPlanDaysNew(WorkoutPlan plan, Goal goal,
                                                   FitnessLevel level,
                                                   FitnessCalculator.FsLevel fsLevel,
@@ -520,7 +401,6 @@ public class WorkoutPlanService {
         String[] names = {"Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"};
         int[] dow = {1,3,5,2,4,6,7};
 
-        // Số bài/nhóm cơ theo Level
         int exPerGroup = calcExPerGroupByLevel(level, sessions);
 
         List<WorkoutPlanDay> days = new ArrayList<>();
@@ -537,16 +417,6 @@ public class WorkoutPlanService {
         return days;
     }
 
-    // ─────────────────────────────────────────────────────────
-    // 3. calcExPerGroupByLevel — số bài/nhóm cơ theo Level
-    //
-    // BEGINNER:     ít bài, ưu tiên EASY/MEDIUM
-    // INTERMEDIATE: trung bình, mix MEDIUM/HARD
-    // ADVANCED:     nhiều bài, ưu tiên MEDIUM/HARD
-    //
-    // Số bài cơ bản theo sessions:
-    //   2 buổi → 3 bài/nhóm; 3 buổi → 2; 4 buổi → 2; 5+ buổi → 1-2
-    // ─────────────────────────────────────────────────────────
     private int calcExPerGroupByLevel(FitnessLevel level, int sessions) {
         int base = switch (sessions) {
             case 2 -> 3;
@@ -555,24 +425,12 @@ public class WorkoutPlanService {
             default -> 1;
         };
         return switch (level) {
-            case BEGINNER     -> Math.max(1, base - 1); // giảm 1 bài so với base
+            case BEGINNER     -> Math.max(1, base - 1);
             case INTERMEDIATE -> base;
-            case ADVANCED     -> base + 1;              // thêm 1 bài so với base
+            case ADVANCED     -> base + 1;
         };
     }
 
-    // ─────────────────────────────────────────────────────────
-    // 4. buildExercisesNew
-    //
-    // Level quyết định:
-    //   - Số bài (exPerGroup — đã tính ở trên)
-    //   - Độ khó bài tập ưu tiên:
-    //       BEGINNER:     EASY trước, nếu không đủ mới lấy MEDIUM
-    //       INTERMEDIATE: MEDIUM trước, mix EASY/HARD
-    //       ADVANCED:     HARD/MEDIUM, hạn chế EASY
-    //
-    // FS + BodyType quyết định Sets/Reps
-    // ─────────────────────────────────────────────────────────
     private List<WorkoutPlanExercise> buildExercisesNew(WorkoutPlanDay day,
                                                         List<MuscleGroup> groups,
                                                         Goal goal,
@@ -580,10 +438,8 @@ public class WorkoutPlanService {
                                                         FitnessCalculator.FsLevel fsLevel,
                                                         FitnessCalculator.BodyType bodyType,
                                                         int exPerGroup) {
-        // Sets/Reps gốc từ FS × Goal
         int[] baseSR = fitnessCalculator.calcSetsRepsByFS(fsLevel, goal);
 
-        // Điều chỉnh Set/Rep theo BodyType (chỉ +/- sets và reps, không đổi % tạ)
         int[] adj = fitnessCalculator.bodyTypeAdjustment(bodyType, goal);
         int finalSets = Math.max(1, baseSR[0] + adj[0]);
         int finalReps = Math.max(4, baseSR[1] + adj[1]);
@@ -592,7 +448,6 @@ public class WorkoutPlanService {
         int idx = 1;
 
         for (MuscleGroup mg : groups) {
-            // Lấy bài tập theo độ khó ưu tiên theo Level
             List<Exercise> cands = getExercisesByLevelAndGoal(mg, goal, level, exPerGroup);
             for (Exercise ex : cands) {
                 result.add(WorkoutPlanExercise.builder()
@@ -610,15 +465,6 @@ public class WorkoutPlanService {
         return result;
     }
 
-    // ─────────────────────────────────────────────────────────
-    // 5. getExercisesByLevelAndGoal
-    //
-    // BEGINNER:     lấy EASY trước (sort by goalScore DESC),
-    //               nếu chưa đủ exPerGroup mới lấy thêm MEDIUM
-    // INTERMEDIATE: lấy MEDIUM trước, thêm HARD/EASY nếu thiếu
-    // ADVANCED:     lấy HARD + MEDIUM, tránh EASY
-    //               (nhưng nếu không đủ vẫn lấy EASY để không thiếu bài)
-    // ─────────────────────────────────────────────────────────
     private List<Exercise> getExercisesByLevelAndGoal(MuscleGroup mg, Goal goal,
                                                       FitnessLevel level, int need) {
         List<Exercise> result = new ArrayList<>();
@@ -631,10 +477,8 @@ public class WorkoutPlanService {
 
         for (Difficulty diff : priorityOrder) {
             if (result.size() >= need) break;
-            // Lấy bài theo nhóm cơ + difficulty, sort theo goal score
             List<Exercise> pool = exerciseRepo
                     .findByMuscleGroupAndDifficultyAndIsActiveTrue(mg, diff);
-            // Sort theo goal score
             pool.sort((a, b) -> Integer.compare(
                     getGoalScore(b, goal), getGoalScore(a, goal)));
             for (Exercise ex : pool) {
@@ -645,7 +489,6 @@ public class WorkoutPlanService {
         return result;
     }
 
-    // Helper: lấy goal score của 1 exercise
     private int getGoalScore(Exercise ex, Goal goal) {
         return switch (goal) {
             case MUSCLE_GAIN -> ex.getMuscleGainScore()   != null ? ex.getMuscleGainScore()   : 0;
@@ -655,7 +498,6 @@ public class WorkoutPlanService {
             default          -> ex.getMaintenanceScore()  != null ? ex.getMaintenanceScore()  : 0;
         };
     }
-
 
     private List<WorkoutPlanExercise> buildExercises(WorkoutPlanDay day,
                                                      List<MuscleGroup> groups, Goal goal, FitnessLevel level,
@@ -872,6 +714,14 @@ public class WorkoutPlanService {
                 .weightAdjustmentNote(plan.getWeightAdjustmentNote())
                 .suggestedDays(Boolean.TRUE.equals(plan.getIsAiGenerated()) ? suggested : null)
                 .scheduleNote(Boolean.TRUE.equals(plan.getIsAiGenerated()) ? note : null)
+                // ── MỚI: Mana ──
+                .maxMana(plan.getMaxMana())
+                .currentMana(plan.getCurrentMana())
+                // Câu động viên dựa trên thể lực GỐC (maxMana, cố định theo FS lúc tạo giáo án),
+                // không dùng currentMana vì con số đó bị trừ dần sau mỗi buổi tập.
+                .manaMessage(plan.getMaxMana() != null
+                        ? ManaMessageHelper.buildMessage(plan.getMaxMana(), plan.getMaxMana())
+                        : null)
                 .build();
     }
 
@@ -890,6 +740,11 @@ public class WorkoutPlanService {
 
     private WorkoutPlanExerciseResponse buildExResponse(WorkoutPlanExercise pe) {
         Exercise ex = pe.getExercise();
+        boolean justRevealed = pe.getWeightUpdatedWeek() != null
+                && pe.getPlanDay() != null
+                && pe.getPlanDay().getWorkoutPlan() != null
+                && pe.getWeightUpdatedWeek().equals(pe.getPlanDay().getWorkoutPlan().getCurrentWeek());
+
         return WorkoutPlanExerciseResponse.builder()
                 .id(pe.getId())
                 .exerciseId(ex.getId())
@@ -904,6 +759,9 @@ public class WorkoutPlanService {
                 .notes(pe.getNotes())
                 .videoUrl(ex.getVideoUrl())
                 .caloriesBurned(ex.getCaloriesBurned())
+                .baseWeightKg(pe.getBaseWeightKg())
+                .currentWeightKg(pe.getCurrentWeightKg())
+                .weightJustRevealed(justRevealed)
                 .build();
     }
 
@@ -941,17 +799,8 @@ public class WorkoutPlanService {
         return userRepo.findByEmail(email).orElseThrow(() -> new RuntimeException("User not found"));
     }
 
-    /**
-     * Deactivate plan cũ đang active của user:
-     * 1. Xóa toàn bộ WorkoutSession thuộc plan cũ (kể cả đã completed)
-     * 2. Set plan.isActive = false
-     *
-     * Làm sạch hoàn toàn để plan mới bắt đầu từ trạng thái trắng.
-     */
-
     private void deactivateAndCleanOldPlan(Long userId) {
         planRepo.findByUserIdAndIsActiveTrue(userId).ifPresent(oldPlan -> {
-            // Xóa tất cả session của plan cũ
             List<WorkoutSession> oldSessions = sessionRepo
                     .findByUserIdAndWorkoutPlanId(userId, oldPlan.getId());
             if (!oldSessions.isEmpty()) {
@@ -962,9 +811,6 @@ public class WorkoutPlanService {
         });
     }
 
-    // ─────────────────────────────────────────────────────────
-    // Method hỗ trợ cho AdminController (để fix lỗi)
-    // ─────────────────────────────────────────────────────────
     public WorkoutPlanResponse buildPlanResponse(WorkoutPlan plan) {
         return toPlanResponse(plan, null);
     }
