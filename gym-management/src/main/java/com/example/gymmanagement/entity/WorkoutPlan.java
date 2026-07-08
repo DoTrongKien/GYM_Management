@@ -34,32 +34,28 @@ public class WorkoutPlan {
     @Enumerated(EnumType.STRING)
     private FitnessLevel targetLevel;
 
-    private Integer durationWeeks;        // ban đầu = 6
-    private Integer sessionsPerWeek;      // min 4 nếu MUSCLE_GAIN/WEIGHT_LOSS
-    private Integer currentWeek;          // tuần hiện tại (bắt đầu = 1)
+    private Integer durationWeeks;
+    private Integer sessionsPerWeek;
+    private Integer currentWeek;
 
     @Builder.Default
     private Boolean isActive      = true;
     @Builder.Default
     private Boolean isAiGenerated = false;
 
-    // === MỚI: true = template do admin tạo tay (chưa gán user) ===
     @Builder.Default
     private Boolean isTemplate = false;
 
     @Builder.Default
     private Boolean isCompleted   = false;
 
-    // Ngày bắt đầu chu kỳ tuần đầu tiên
     private LocalDate weekStartDate;
 
-    // BMI / cân nặng khi tạo giáo án (để so sánh tiến độ)
     private Double startingBmi;
     private Double startingWeight;
 
-    // Điều chỉnh tự động theo tiến độ
     @Builder.Default
-    private Integer difficultyAdjustment = 0; // -1=giảm, 0=giữ, 1=tăng
+    private Integer difficultyAdjustment = 0;
 
     @Builder.Default
     private Integer setsAdjustment       = 0;
@@ -67,12 +63,15 @@ public class WorkoutPlan {
     @Builder.Default
     private Integer repsAdjustment       = 0;
 
-    // === TRƯỜNG MỚI: Điều chỉnh số lượng bài tập ===
     @Builder.Default
     private Integer exercisesAdjustment  = 0;
 
     private String weightAdjustmentNote;
 
+    // ── MỚI: Hệ thống Mana (thể lực) ─────────────────────────
+    private Integer maxMana;           // = FS * 2, tính khi tạo/rebuild giáo án AI
+    private Integer currentMana;       // giá trị runtime, trừ dần mỗi checkout
+    private LocalDate lastTrainingDate; // ngày checkout gần nhất, dùng để tính hồi phục
 
     private LocalDateTime createdAt;
 

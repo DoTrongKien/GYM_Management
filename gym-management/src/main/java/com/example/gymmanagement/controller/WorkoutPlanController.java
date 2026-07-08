@@ -21,24 +21,21 @@ public class WorkoutPlanController {
 
     private final WorkoutPlanService planService;
 
-    // GET /api/workout-plans/templates — user xem danh sách giáo án mẫu để chọn
     @GetMapping("/templates")
     public ResponseEntity<ApiResponse<List<WorkoutPlanResponse>>> getTemplates() {
         return ResponseEntity.ok(ApiResponse.success(planService.getAllTemplates(true)));
     }
 
-    // POST /api/workout-plans/templates/{id}/select — user chọn 1 template -> tạo plan active cho mình
     @PostMapping("/templates/{id}/select")
     public ResponseEntity<ApiResponse<WorkoutPlanResponse>> selectTemplate(
             @PathVariable Long id,
-            @AuthenticationPrincipal UserDetails ud) { // Đồng bộ sử dụng @AuthenticationPrincipal UserDetails
+            @AuthenticationPrincipal UserDetails ud) {
 
         String email = ud.getUsername();
         return ResponseEntity.ok(ApiResponse.success(
                 planService.selectTemplate(email, id), "Đã áp dụng giáo án mẫu"));
     }
 
-    // Tạo giáo án AI theo hồ sơ + mục tiêu + số ngày
     @PostMapping("/generate-with-goal")
     public ResponseEntity<ApiResponse<WorkoutPlanResponse>> generateWithGoal(
             @AuthenticationPrincipal UserDetails ud,
@@ -49,7 +46,7 @@ public class WorkoutPlanController {
                         req.getFitnessLevel(), req.getDaysPerWeek()),
                 "Giáo án AI đã được tạo!"));
     }
-    // Điều chỉnh giáo án sau khi hoàn thành 1 tuần
+
     @PostMapping("/{id}/adjust-week")
     public ResponseEntity<ApiResponse<WorkoutPlanResponse>> adjustWeek(
             @AuthenticationPrincipal UserDetails ud,
@@ -95,7 +92,6 @@ public class WorkoutPlanController {
         return ResponseEntity.ok(ApiResponse.success(planService.getAllPlans(ud.getUsername())));
     }
 
-    // Gợi ý ngày tập theo mục tiêu
     @GetMapping("/suggest-days")
     public ResponseEntity<ApiResponse<Map<String, Object>>> suggestDays(
             @RequestParam String goal,
@@ -105,7 +101,6 @@ public class WorkoutPlanController {
         return ResponseEntity.ok(ApiResponse.success(Map.of("suggestedDays", days)));
     }
 
-    // Goals list cho FE
     @GetMapping("/goals")
     public ResponseEntity<ApiResponse<List<Map<String, String>>>> getGoals() {
         return ResponseEntity.ok(ApiResponse.success(List.of(
@@ -115,5 +110,14 @@ public class WorkoutPlanController {
                 Map.of("value","FLEXIBILITY", "label","🤸 Tăng linh hoạt",      "minDays","2"),
                 Map.of("value","MAINTENANCE", "label","⚖️ Duy trì thể hình",    "minDays","2")
         )));
+    }
+
+    // ── MỚI: Nhập tạ khởi điểm cho 1 bài tập trong giáo án (chỉ 1 lần) ──
+    @PatchMapping("/plan-exercises/{id}/base-weight")
+    public ResponseEntity<ApiResponse<WorkoutPlanExerciseResponse>> setBaseWeight(
+            @PathVariable Long id,
+            @RequestBody Map<String, Double> body) {
+        return ResponseEntity.ok(ApiResponse.success(
+                planService.setBaseWeight(id, body.get("weight")), "Đã lưu tạ khởi điểm"));
     }
 }

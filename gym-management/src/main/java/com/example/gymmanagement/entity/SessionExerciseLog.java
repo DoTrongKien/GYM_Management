@@ -27,4 +27,7 @@ public class SessionExerciseLog {
     private Boolean isCompleted = false;
     private String notes;
     private LocalDateTime loggedAt = LocalDateTime.now();
+
+    // ── MỚI: tỉ lệ hoàn thành theo từng bài (0/25/50/75/100) ──
+    private Integer completionPercent;
 }

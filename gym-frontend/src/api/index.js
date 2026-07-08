@@ -56,7 +56,8 @@ export const planAPI = {
     adjustWeek:   (id, data) => api.post(`/workout-plans/${id}/adjust-week`, data),
     // === MỚI: User xem & chọn giáo án mẫu do admin tạo ===
     getTemplates:    ()    => api.get('/workout-plans/templates'),
-    selectTemplate:  (id)  => api.post(`/workout-plans/templates/${id}/select`)
+    selectTemplate:  (id)  => api.post(`/workout-plans/templates/${id}/select`),
+    setBaseWeight: (planExerciseId, payload) => api.patch(`/workout-plans/plan-exercises/${planExerciseId}/base-weight`, payload)
 }
 
 // ── Sessions ──────────────────────────────────
