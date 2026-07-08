@@ -104,6 +104,13 @@ const router = createRouter({
                 },
 
                 {
+                    path: 'payment/:invoiceId',
+                    name: 'UserPaymentQR',
+                    component: () =>
+                        import('@/views/user/PaymentQR.vue')
+                },
+
+                {
                     path: 'exercises',
                     name: 'Exercises',
                     component: () =>

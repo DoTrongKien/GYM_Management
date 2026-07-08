@@ -4,6 +4,7 @@
       <div class="sidebar-logo" @click="router.push('/app/dashboard')">
         <span class="display" style="color:var(--c-text-inv);font-size:1.8rem">GYM</span>
         <span class="display accent" style="font-size:1.8rem" v-show="!collapsed">PRO</span>
+        <span v-if="isVip" class="vip-badge" v-show="!collapsed">👑 VIP</span>
       </div>
 
       <el-menu :default-active="route.path" router class="sidebar-menu" :collapse="collapsed">
@@ -55,16 +56,25 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { membershipAPI } from '@/api'
 import NotificationBell from './NotificationBell.vue'
 
 const auth      = useAuthStore()
 const route     = useRoute()
 const router    = useRouter()
 const collapsed = ref(false)
+const isVip     = ref(false)
 const initials  = computed(() => (auth.user?.fullName || 'U').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2))
+
+onMounted(async () => {
+  try {
+    const res = await membershipAPI.getActive()
+    isVip.value = res.data?.membershipType === 'VIP'
+  } catch { isVip.value = false }
+})
 
 const titles = {
   '/app/dashboard':'Dashboard', '/app/profile':'Hồ sơ cá nhân',
@@ -91,9 +101,15 @@ const pageTitle = computed(() => titles[route.path] || 'GymPro')
 
 .sidebar-logo {
   height:60px; padding:0 16px; cursor:pointer;
-  display:flex; align-items:center; gap:2px;
+  display:flex; align-items:center; gap:6px;
   border-bottom: 1px solid rgba(255,255,255,0.1);
   flex-shrink:0;
+}
+.vip-badge {
+  font-size:0.65rem; font-weight:700; letter-spacing:0.04em;
+  background:linear-gradient(135deg,#f5c518,#d4892a);
+  color:#2b1b17; padding:2px 8px; border-radius:20px;
+  white-space:nowrap;
 }
 
 .sidebar-menu { flex:1; overflow-y:auto; overflow-x:hidden; padding:10px 0; }
