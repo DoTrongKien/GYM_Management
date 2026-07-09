@@ -4,6 +4,7 @@
       <div class="sidebar-logo" @click="router.push('/app/dashboard')">
         <span class="display" style="color:var(--c-text-inv);font-size:1.8rem">GYM</span>
         <span class="display accent" style="font-size:1.8rem" v-show="!collapsed">PRO</span>
+        <span v-if="isVip" class="vip-badge" v-show="!collapsed">👑 VIP</span>
       </div>
 
       <el-menu :default-active="route.path" router class="sidebar-menu" :collapse="collapsed">
@@ -16,7 +17,12 @@
         <el-menu-item index="/app/membership"><el-icon><CreditCard/></el-icon><template #title>Gói tập</template></el-menu-item>
         <el-menu-item index="/app/exercises"><el-icon><Trophy/></el-icon><template #title>Bài tập</template></el-menu-item>
         <el-menu-item index="/app/ratings"><el-icon><Star/></el-icon><template #title>Đánh giá</template></el-menu-item>
-        <el-menu-item index="/app/chat"><el-icon><ChatDotRound/></el-icon><template #title>Trợ lý</template></el-menu-item>
+        <el-menu-item index="/app/chat">
+          <el-badge :value="unreadCount" :max="9" :hidden="!unreadCount" class="menu-badge">
+            <el-icon><ChatDotRound/></el-icon>
+          </el-badge>
+          <template #title>Trợ lý</template>
+        </el-menu-item>
       </el-menu>
 
       <div class="sidebar-bottom">
@@ -55,16 +61,73 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { membershipAPI, supportAPI } from '@/api'
+import { ElNotification } from 'element-plus'
+import { setOtherRole, setSessions, unreadCount } from '@/stores/supportUnread'
 import NotificationBell from './NotificationBell.vue'
 
 const auth      = useAuthStore()
 const route     = useRoute()
 const router    = useRouter()
 const collapsed = ref(false)
+const isVip     = ref(false)
 const initials  = computed(() => (auth.user?.fullName || 'U').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2))
+
+// ── Thông báo tin nhắn mới từ admin (hoạt động ở mọi trang) ──
+const lastMsgSeen = new Map()       // id phiên -> lastMessageAt đã thấy
+let firstSupportLoad = true
+let supportTimer = null
+
+setOtherRole('ADMIN')               // phía bên kia của user là admin
+
+async function pollSupport() {
+  try {
+    const res = await supportAPI.sessions()
+    const list = res.data || []
+    setSessions(list)               // cập nhật badge chưa đọc
+    const openIds = new Set(list.map(s => s.id))
+    list.forEach(s => {
+      const prevAt = lastMsgSeen.get(s.id)
+      if (s.lastMessageAt) {
+        // Bỏ qua khi đang ở trang chat — ChatView tự báo, tránh thông báo trùng
+        if (!firstSupportLoad && s.lastMessageRole === 'ADMIN' && prevAt
+            && new Date(s.lastMessageAt).getTime() > new Date(prevAt).getTime()
+            && route.path !== '/app/chat') {
+          notifyNewAdminMessage(s)
+        }
+        lastMsgSeen.set(s.id, s.lastMessageAt)
+      }
+    })
+    lastMsgSeen.forEach((_, id) => { if (!openIds.has(id)) lastMsgSeen.delete(id) })
+    firstSupportLoad = false
+  } catch {}
+}
+
+function notifyNewAdminMessage(s) {
+  const inst = ElNotification({
+    title: `💬 ${s.adminName || 'Admin'} vừa nhắn`,
+    type: 'success',
+    duration: 6000,
+    message: h('div', {
+      style: 'cursor:pointer',
+      onClick: () => { router.push('/app/chat'); inst.close() }
+    }, s.lastMessage || 'Đã gửi một tin nhắn')
+  })
+}
+
+onMounted(async () => {
+  try {
+    const res = await membershipAPI.getActive()
+    isVip.value = res.data?.membershipType === 'VIP'
+  } catch { isVip.value = false }
+  pollSupport()
+  supportTimer = setInterval(pollSupport, 5000)
+})
+
+onUnmounted(() => { if (supportTimer) clearInterval(supportTimer) })
 
 const titles = {
   '/app/dashboard':'Dashboard', '/app/profile':'Hồ sơ cá nhân',
@@ -91,9 +154,15 @@ const pageTitle = computed(() => titles[route.path] || 'GymPro')
 
 .sidebar-logo {
   height:60px; padding:0 16px; cursor:pointer;
-  display:flex; align-items:center; gap:2px;
+  display:flex; align-items:center; gap:6px;
   border-bottom: 1px solid rgba(255,255,255,0.1);
   flex-shrink:0;
+}
+.vip-badge {
+  font-size:0.65rem; font-weight:700; letter-spacing:0.04em;
+  background:linear-gradient(135deg,#f5c518,#d4892a);
+  color:#2b1b17; padding:2px 8px; border-radius:20px;
+  white-space:nowrap;
 }
 
 .sidebar-menu { flex:1; overflow-y:auto; overflow-x:hidden; padding:10px 0; }
@@ -128,4 +197,10 @@ const pageTitle = computed(() => titles[route.path] || 'GymPro')
 
 .page-enter-active,.page-leave-active { transition:opacity 0.2s; }
 .page-enter-from,.page-leave-to { opacity:0; }
+
+/* Badge đỏ số tin nhắn hỗ trợ chưa đọc trên menu item */
+.sidebar-menu .el-menu-item .menu-badge { display:inline-flex; align-items:center; }
+.sidebar-menu .el-menu-item .menu-badge :deep(.el-badge__content) {
+  top:4px; right:4px; border:none; font-family:var(--font-mono); font-size:0.62rem;
+}
 </style>

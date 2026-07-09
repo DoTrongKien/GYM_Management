@@ -56,7 +56,8 @@ export const planAPI = {
     adjustWeek:   (id, data) => api.post(`/workout-plans/${id}/adjust-week`, data),
     // === MỚI: User xem & chọn giáo án mẫu do admin tạo ===
     getTemplates:    ()    => api.get('/workout-plans/templates'),
-    selectTemplate:  (id)  => api.post(`/workout-plans/templates/${id}/select`)
+    selectTemplate:  (id)  => api.post(`/workout-plans/templates/${id}/select`),
+    setBaseWeight: (planExerciseId, payload) => api.patch(`/workout-plans/plan-exercises/${planExerciseId}/base-weight`, payload)
 }
 
 // ── Sessions ──────────────────────────────────
@@ -92,6 +93,13 @@ export const membershipAPI = {
     getActive:      ()     => api.get('/memberships/active'),
     purchase:       (data) => api.post('/memberships', data),
     confirmPayment: (id, txId) => api.post(`/memberships/${id}/confirm-payment`, { transactionId: txId })
+}
+export const invoiceAPI = {
+    create:        (membershipType) => api.post('/invoices', { membershipType }),
+    getAll:        ()   => api.get('/invoices'),
+    getOne:        (id) => api.get(`/invoices/${id}`),
+    regenerateQr:  (id) => api.post(`/invoices/${id}/regenerate-qr`),
+    cancel:        (id) => api.post(`/invoices/${id}/cancel`)
 }
 
 // ── Nutrition ─────────────────────────────────
@@ -132,7 +140,7 @@ export const chatAPI = {
 
 // ── Chat với admin (User) ─────────────────────
 export const supportAPI = {
-    request:   (subject)     => api.post('/support/request', { subject }),
+    request:   (formData)    => api.post('/support/request', formData, { timeout: 120000 }),
     sessions:  ()            => api.get('/support/sessions'),
     messages:  (id)          => api.get(`/support/sessions/${id}/messages`),
     send:      (id, content) => api.post(`/support/sessions/${id}/messages`, { content }),

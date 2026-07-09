@@ -20,6 +20,7 @@
               <div class="s-meta">{{ s.userName || s.userEmail }} · {{ fmtTime(s.createdAt) }}</div>
             </div>
           </div>
+          <div v-if="s.lastMessage" class="s-content">{{ s.lastMessage }}</div>
           <div class="session-actions">
             <el-button size="small" type="success" @click="accept(s)">Chấp nhận</el-button>
             <el-button size="small" type="danger" plain @click="reject(s)">Từ chối</el-button>
@@ -38,6 +39,7 @@
               <div class="s-name ellipsis">{{ s.subject || 'Hỗ trợ' }}</div>
               <div class="s-meta ellipsis">{{ s.userName }} · {{ s.lastMessage || 'Bắt đầu trò chuyện…' }}</div>
             </div>
+            <span v-if="isUnread(s)" class="unread-dot" title="Có tin nhắn mới"/>
           </div>
         </div>
       </el-card>
@@ -94,6 +96,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { adminSupportAPI } from '@/api'
 import { ElMessage } from 'element-plus'
 import MessageBody from '@/components/common/MessageBody.vue'
+import { setSessions, markRead, isUnread } from '@/stores/supportUnread'
 import dayjs from 'dayjs'
 
 const sessions   = ref([])
@@ -121,7 +124,7 @@ const sentText = computed(() =>
   : sendStatus.value === 'failed' ? '⚠ Gửi lỗi, thử lại' : 'Đã gửi ✓')
 
 async function loadSessions() {
-  try { const res = await adminSupportAPI.sessions(); sessions.value = res.data || [] }
+  try { const res = await adminSupportAPI.sessions(); sessions.value = res.data || []; setSessions(sessions.value) }
   catch {}
   // Nếu phiên đang chọn đã bị đóng ở nơi khác
   if (selected.value && !active.value.find(s => s.id === selected.value.id)) {
@@ -147,6 +150,7 @@ async function reject(s) {
 async function select(s) {
   selected.value = s
   sendStatus.value = null
+  markRead(s.id)                    // mở xem → hết chưa đọc
   await loadMessages()
 }
 
@@ -201,7 +205,10 @@ async function closeSession() {
 
 async function pollTick() {
   await loadSessions()
-  if (selected.value) await loadMessages()
+  if (selected.value) {
+    markRead(selected.value.id)     // đang mở xem thì luôn coi là đã đọc
+    await loadMessages()
+  }
 }
 
 function nameInitials(name) { return (name || 'U').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) }
@@ -232,6 +239,12 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 .session-item.selected { background:var(--c-card2); border-left:3px solid var(--c-accent); }
 .session-info { display:flex; align-items:center; gap:10px; }
 
+/* Chấm đỏ báo có tin nhắn chưa đọc */
+.unread-dot {
+  width:9px; height:9px; border-radius:50%; background:#f56c6c; flex-shrink:0;
+  margin-left:auto; box-shadow:0 0 0 3px rgba(245,108,108,0.18);
+}
+
 .avatar {
   width:38px; height:38px; border-radius:50%; flex-shrink:0;
   background:var(--c-accent); color:#fff;
@@ -243,6 +256,11 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 
 .s-name { font-size:0.88rem; font-weight:600; color:var(--c-text); }
 .s-meta { font-size:0.74rem; color:var(--c-text3); }
+.s-content {
+  font-size:0.8rem; color:var(--c-text2); margin-top:4px; max-width:250px;
+  display:-webkit-box; -webkit-line-clamp:2; line-clamp:2;
+  -webkit-box-orient:vertical; overflow:hidden;
+}
 .ellipsis { max-width:190px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .session-actions { display:flex; gap:8px; }
 

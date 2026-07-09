@@ -12,5 +12,7 @@ public class SupportSessionResponse {
     private String status;        // PENDING / ACTIVE / REJECTED / CLOSED
     private LocalDateTime createdAt;
     private LocalDateTime acceptedAt;
-    private String lastMessage;   // nội dung tin nhắn cuối (cho danh sách của admin)
+    private String lastMessage;          // nội dung tin nhắn cuối (cho danh sách của admin)
+    private LocalDateTime lastMessageAt; // thời điểm tin nhắn cuối (để phát hiện tin mới)
+    private String lastMessageRole;      // USER / ADMIN — ai gửi tin nhắn cuối
 }
