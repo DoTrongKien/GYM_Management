@@ -49,6 +49,9 @@ public class SecurityConfig {
                 .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // SePay gọi server-to-server, không có JWT của user -> phải mở public
+                        .requestMatchers("/api/bank/webhook/**").permitAll()
+                        .requestMatchers("/api/invoices/**").authenticated()
                         // --- THÊM DÒNG NÀY ĐỂ CHO PHÉP TRUY CẬP H2 ---
                         .requestMatchers("/h2-console/**").permitAll()
 

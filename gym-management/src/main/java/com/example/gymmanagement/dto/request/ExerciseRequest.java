@@ -24,4 +24,6 @@ public class ExerciseRequest {
     private Integer enduranceScore   = 0;
     private Integer flexibilityScore = 0;
     private Integer maintenanceScore = 0;
+
+    private Integer staminaCost = 10; // 0-200, mặc định 10
 }

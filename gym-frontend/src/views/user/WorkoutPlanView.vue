@@ -87,10 +87,24 @@
         </div>
       </div>
 
-      <!-- Gợi ý tăng/giảm tạ - hiện cho CẢ 2 loại plan -->
-      <div v-if="plan.weightAdjustmentNote" class="weight-adjustment-box">
-        ⚖️ <strong>Gợi ý mức tạ tuần này:</strong> {{ plan.weightAdjustmentNote }}
+      <!-- MỚI: Thanh Mana (thể lực) -->
+      <div v-if="plan.maxMana" class="mana-box">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <span style="font-weight:700">⚡ Thể lực</span>
+          <span style="font-weight:700">{{ plan.currentMana }}/{{ plan.maxMana }}</span>
+        </div>
+        <div class="mana-bar-track">
+          <div class="mana-bar-fill" :style="{ width: (plan.currentMana / plan.maxMana * 100) + '%' }"></div>
+        </div>
+        <div style="margin-top:6px;font-size:0.85rem">{{ plan.manaMessage }}</div>
       </div>
+
+      <!-- Gợi ý tăng/giảm tạ - hiện cho CẢ 2 loại plan -->
+      <!-- tạm thời bỏ qua nếu dùng thì lấy -->
+      <!-- <div v-if="plan.weightAdjustmentNote" class="weight-adjustment-box"> -->
+      <!--  ⚖️ <strong>Gợi ý mức tạ tuần này:</strong> {{ plan.weightAdjustmentNote }} -->
+      <!-- </div> -->
+
 
       <div class="days-grid">
         <el-card
@@ -316,36 +330,41 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="checkOutDialog" title="🏁 CHECK-OUT HOÀN THÀNH BUỔI TẬP" width="460px" align-center>
-      <el-form :model="coForm" label-position="top">
-        <div style="margin-bottom:14px; font-weight:600; color:var(--c-text)">
-          Buổi {{ selectedDayNumber }} - Tuần {{ plan?.currentWeek }}
+    <!-- ===================== DIALOG CHECK-OUT (ĐÃ ĐỔI SANG THEO TỪNG BÀI TẬP) ===================== -->
+    <el-dialog v-model="checkOutDialog" title="🏁 CHECK-OUT HOÀN THÀNH BUỔI TẬP" width="520px" align-center>
+      <div style="margin-bottom:14px; font-weight:600; color:var(--c-text)">
+        Buổi {{ selectedDayNumber }} - Tuần {{ plan?.currentWeek }}
+      </div>
+
+      <div v-for="ex in checkoutExercises" :key="ex.exerciseId" class="checkout-ex-row">
+        <div style="font-weight:600;margin-bottom:8px">{{ ex.exerciseName }}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <el-button
+            v-for="pct in [0,25,50,75,100]" :key="pct"
+            :type="coForm.logs[ex.exerciseId]?.completionPercent === pct ? 'primary' : ''"
+            size="small"
+            @click="setPercent(ex.exerciseId, pct)"
+          >
+            {{ pct }}%
+          </el-button>
         </div>
+      </div>
 
-        <el-form-item label="Tỉ lệ hoàn thành của buổi tập (%)" required>
-          <div style="display:flex; align-items:center; gap:12px; width:100%">
-            <el-slider v-model="coForm.completionRate" :min="0" :max="100" style="flex:1" />
-            <span style="font-weight:700; width:45px; text-align:right">{{ coForm.completionRate }}%</span>
-          </div>
-        </el-form-item>
-
-        <div v-if="coForm.isLastSessionOfWeek" class="body-progress-box">
-          <h4 style="margin:0 0 10px 0; color:#b45309">⚖ CẬP NHẬT SỐ LIỆU CƠ THỂ (Buổi Cuối Tuần)</h4>
-          <p style="font-size:0.8rem; margin:0 0 12px 0; color:#d97706">
-            Đây là buổi tập cuối cùng trong tuần này. Vui lòng nhập cân nặng hiện tại để có thể cập nhật chỉ số cơ thể.
-          </p>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
-            <el-form-item label="Cân nặng hiện tại (kg) *" required>
-              <el-input-number v-model="coForm.checkoutWeight" :min="30" :max="300" :precision="1" style="width:100%" />
-            </el-form-item>
-            <el-form-item label="Tỉ lệ mỡ (%) - Body Fat">
-              <el-input-number v-model="coForm.checkoutBodyFat" :min="2" :max="60" :precision="1" style="width:100%" />
-            </el-form-item>
-          </div>
+      <div v-if="coForm.isLastSessionOfWeek" class="body-progress-box">
+        <h4 style="margin:0 0 10px 0; color:#b45309">⚖ CẬP NHẬT SỐ LIỆU CƠ THỂ (Buổi Cuối Tuần)</h4>
+        <p style="font-size:0.8rem; margin:0 0 12px 0; color:#d97706">
+          Đây là buổi tập cuối cùng trong tuần này. Vui lòng nhập cân nặng hiện tại để có thể cập nhật chỉ số cơ thể.
+        </p>
+        <div style="display:flex; flex-direction:column; gap:12px">
+          <el-form-item label="Cân nặng hiện tại (kg) *" required style="margin-bottom:0">
+            <el-input-number v-model="coForm.checkoutWeight" :min="30" :max="300" :precision="1" style="width:100%" />
+          </el-form-item>
+          <el-form-item label="Tỉ lệ mỡ (%) - Body Fat" style="margin-bottom:0">
+            <el-input-number v-model="coForm.checkoutBodyFat" :min="2" :max="60" :precision="1" style="width:100%" />
+          </el-form-item>
         </div>
+      </div>
 
-
-      </el-form>
       <template #footer>
         <el-button @click="checkOutDialog=false">Hủy</el-button>
         <el-button
@@ -358,8 +377,7 @@
       </template>
     </el-dialog>
 
-
-
+    <!-- ===================== DIALOG CHI TIẾT BÀI TẬP (ĐÃ THÊM PHẦN NHẬP/HIỂN THỊ TẠ) ===================== -->
     <el-dialog v-model="exDetailDialog" :title="selEx?.exerciseName" width="540px" align-center v-if="selEx">
       <div v-if="selEx.videoUrl" class="video-wrap">
         <iframe :src="ytEmbed(selEx.videoUrl)" frameborder="0" allowfullscreen
@@ -382,6 +400,28 @@
           {{ selEx.notes }}
         </el-descriptions-item>
       </el-descriptions>
+
+      <!-- MỚI: Hướng dẫn xác định tạ -->
+      <div class="weight-guide-box">
+        📏 <strong>Cách xác định tạ:</strong> chọn 1 mức tạ mà bạn tập đến set thứ 12 thì không thể tập tiếp được nữa.
+        Với bài không dùng tạ, lấy cân nặng cơ thể làm chuẩn (có thể thêm dây kháng lực để tăng/giảm khối lượng).
+      </div>
+
+      <!-- MỚI: Chưa có tạ khởi điểm -> cho nhập (chỉ 1 lần) -->
+      <div v-if="!selEx.baseWeightKg" style="margin-top:14px">
+        <el-form-item label="Nhập mức tạ khởi điểm (kg)">
+          <el-input-number v-model="baseWeightInput" :min="0" :max="500" :precision="1" style="width:100%"/>
+        </el-form-item>
+        <el-button type="primary" @click="saveBaseWeight" :loading="savingWeight">Lưu tạ khởi điểm</el-button>
+      </div>
+
+      <!-- MỚI: Hiển thị tạ hiện tại trực tiếp, không cần bấm mở -->
+      <div class="weight-reveal">
+        ⚖️ Tạ áp dụng tuần này: <strong>{{ selEx.currentWeightKg }} kg</strong>
+        <span v-if="selEx.weightJustRevealed && selEx.currentWeightKg > selEx.baseWeightKg" style="color:#16a34a"> (tăng so với tuần trước 📈)</span>
+        <span v-else-if="selEx.weightJustRevealed && selEx.currentWeightKg < selEx.baseWeightKg" style="color:#dc2626"> (giảm so với tuần trước 📉)</span>
+      </div>
+
       <template #footer>
         <el-button @click="exDetailDialog=false">Đóng</el-button>
       </template>
@@ -413,7 +453,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { planAPI, sessionAPI } from '@/api'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 
 const plan = ref(null)
@@ -439,12 +479,19 @@ const selectedDay = ref(null)
 const selectedDayNumber = ref(null)
 const checkoutSessionId = ref(null)
 
-// === MỚI: state cho dialog tạo giáo án có 2 tab (AI / Giáo án mẫu) ===
+// === state cho dialog tạo giáo án có 2 tab (AI / Giáo án mẫu) ===
 const createTab = ref('ai')
 const templates = ref([])
 const loadingTemplates = ref(false)
 const selectedTemplateId = ref(null)
 const applyingTemplate = ref(false)
+
+// === MỚI: state cho checkout theo từng bài tập ===
+const checkoutExercises = ref([])
+
+// === MỚI: state cho nhập tạ khởi điểm ===
+const baseWeightInput = ref(null)
+const savingWeight = ref(false)
 
 const genForm = reactive({
   goal: '',
@@ -464,8 +511,9 @@ const schedForm = reactive({
   weekNumber: 1
 })
 
+// === MỚI: coForm.logs thay cho completionRate tổng ===
 const coForm = reactive({
-  completionRate: 100,
+  logs: {}, // { [exerciseId]: { completionPercent, weightUsedKg } }
   checkoutWeight: null,
   checkoutBodyFat: null,
   notes: '',
@@ -692,10 +740,16 @@ async function handleCheckIn(sessionId) {
   } catch (err) {}
 }
 
+// === MỚI: mở checkout dialog, load danh sách bài tập của buổi đó ===
 function openCheckOutDialog(day, dayNumber) {
   checkoutSessionId.value = day.sessionId
   selectedDayNumber.value = dayNumber
-  coForm.completionRate = 100
+  checkoutExercises.value = day.exercises || []
+
+  coForm.logs = {}
+  checkoutExercises.value.forEach(ex => {
+    coForm.logs[ex.exerciseId] = { completionPercent: null, weightUsedKg: null }
+  })
   coForm.notes = ''
   coForm.checkoutWeight = null
   coForm.checkoutBodyFat = null
@@ -703,23 +757,46 @@ function openCheckOutDialog(day, dayNumber) {
   checkOutDialog.value = true
 }
 
+// === MỚI: chọn tỉ lệ hoàn thành cho 1 bài tập ===
+function setPercent(exerciseId, pct) {
+  coForm.logs[exerciseId].completionPercent = pct
+}
+
 async function submitCheckOut() {
+  const missing = Object.values(coForm.logs).some(l => l.completionPercent === null)
+  if (missing) {
+    ElMessage.warning('Vui lòng chọn tỉ lệ hoàn thành cho tất cả bài tập!')
+    return
+  }
   if (coForm.isLastSessionOfWeek && !coForm.checkoutWeight) {
     ElMessage.warning('Vui lòng nhập cân nặng để cập nhật chỉ số cơ thể!')
     return
   }
+
+  const exerciseLogs = Object.entries(coForm.logs).map(([exerciseId, v]) => ({
+    exerciseId: Number(exerciseId),
+    completionPercent: v.completionPercent,
+    weightUsedKg: v.weightUsedKg
+  }))
+
   checkingOut.value = true
   try {
     const r = await sessionAPI.complete(checkoutSessionId.value, {
-      sessionId: checkoutSessionId.value,
-      completionRate: coForm.completionRate,
       checkoutWeight: coForm.checkoutWeight,
       checkoutBodyFat: coForm.checkoutBodyFat,
       notes: coForm.notes,
-      exerciseLogs: []
+      exerciseLogs
     })
-    // Nếu buổi cuối tuần plan AI → backend tự gọi adjustPlanAfterWeek()
-    // không cần gọi planAPI.adjustWeek riêng nữa
+
+    // MỚI: cảnh báo chấn thương nếu vượt mana
+    if (r.data?.injuryRisk) {
+      ElMessageBox.alert(
+        'Bạn đã tập vượt quá thể lực hiện có. Nguy cơ chấn thương — hãy nghỉ ngơi trước khi tập tiếp!',
+        '⚠️ Cảnh báo chấn thương',
+        { type: 'warning' }
+      )
+    }
+
     const isLastAi = coForm.isLastSessionOfWeek && plan.value?.isAiGenerated
     ElMessage.success(isLastAi ? 'Hoàn thành tuần tập! Giáo án đã được căn chỉnh 🎉' : 'Hoàn thành buổi tập! 🎉')
     if (r.data?.dayMismatchWarning) {
@@ -728,7 +805,7 @@ async function submitCheckOut() {
     checkOutDialog.value = false
     await load()
   } catch (err) {
-    ElMessage.error('Hoàn thành buổi tập thất bại')
+    ElMessage.error(err.response?.data?.message || 'Hoàn thành buổi tập thất bại')
   } finally {
     checkingOut.value = false
   }
@@ -790,9 +867,30 @@ function fmtDate(d) {
   return d ? dayjs(d).format('DD/MM/YYYY') : ''
 }
 
+// === MỚI: mở dialog chi tiết bài tập, reset state tạ ===
 function openExDetail(ex) {
   selEx.value = ex
+  baseWeightInput.value = null
   exDetailDialog.value = true
+}
+
+// === MỚI: lưu tạ khởi điểm (chỉ 1 lần) ===
+async function saveBaseWeight() {
+  if (!baseWeightInput.value) {
+    ElMessage.warning('Nhập mức tạ khởi điểm')
+    return
+  }
+  savingWeight.value = true
+  try {
+    await planAPI.setBaseWeight(selEx.value.id, { weight: baseWeightInput.value })
+    ElMessage.success('Đã lưu tạ khởi điểm!')
+    exDetailDialog.value = false
+    await load()
+  } catch (err) {
+    ElMessage.error(err.response?.data?.message || 'Lưu tạ thất bại')
+  } finally {
+    savingWeight.value = false
+  }
 }
 
 function ytEmbed(url) {
@@ -971,4 +1069,25 @@ onMounted(load)
 .plan-item.active { border-color:var(--c-accent); }
 .video-wrap { border-radius:8px; overflow:hidden; }
 .no-video { text-align:center; padding:20px; color:var(--c-text3); background:var(--c-card2); border-radius:8px; }
+
+/* ═══════════ MỚI ═══════════ */
+.mana-box {
+  background:var(--c-card); padding:14px; border-radius:8px; margin-bottom:20px;
+}
+.mana-bar-track {
+  height:14px; background:#e2e8f0; border-radius:7px; overflow:hidden;
+}
+.mana-bar-fill {
+  height:100%; background:linear-gradient(90deg,#22c55e,#4ade80); transition:width .4s;
+}
+.checkout-ex-row {
+  padding:12px 0; border-bottom:1px solid var(--c-border2);
+}
+.weight-guide-box {
+  margin-top:14px; padding:10px 12px; background:#eef5fe; border-left:4px solid #409eff;
+  font-size:0.82rem; border-radius:4px;
+}
+.weight-reveal {
+  margin-top:16px; padding:14px; background:#f0fdf4; border-radius:8px; font-size:0.95rem;
+}
 </style>

@@ -24,19 +24,56 @@ public class MembershipService {
     private final EmailService emailService;
 
     private static final Map<MembershipType, Double> PRICES = Map.of(
-            MembershipType.BASIC, 299000.0,
-            MembershipType.STANDARD, 499000.0,
-            MembershipType.PREMIUM, 799000.0,
-            MembershipType.VIP, 1299000.0
+            MembershipType.FREE, 0.0,
+            MembershipType.VIP, 299000.0
     );
 
     private static final Map<MembershipType, Integer> DURATIONS_MONTHS = Map.of(
-            MembershipType.BASIC, 1,
-            MembershipType.STANDARD, 3,
-            MembershipType.PREMIUM, 6,
-            MembershipType.VIP, 12
+            MembershipType.FREE, 1200, // gói free không giới hạn thời gian (100 năm)
+            MembershipType.VIP, 1
     );
+    public double getPrice(MembershipType type) {
+        return PRICES.getOrDefault(type, 0.0);
+    }
 
+    public int getDurationMonths(MembershipType type) {
+        return DURATIONS_MONTHS.getOrDefault(type, 1);
+    }
+
+    /**
+     * Dùng bởi InvoiceService: khi SePay webhook xác nhận PAID, tạo thẳng 1 Membership
+     * ở trạng thái PAID/active (khác với purchase() cũ luôn tạo PENDING).
+     */
+    @Transactional
+    public Membership activatePaidMembership(User user, MembershipType type, String transactionId, String paymentMethod) {
+        membershipRepository.findByUserIdAndIsActiveTrue(user.getId()).ifPresent(m -> {
+            m.setIsActive(false);
+            membershipRepository.save(m);
+        });
+
+        LocalDate start = LocalDate.now();
+        int months = getDurationMonths(type);
+        LocalDate end = start.plusMonths(months);
+
+        Membership membership = Membership.builder()
+                .user(user)
+                .membershipType(type)
+                .startDate(start)
+                .endDate(end)
+                .price(getPrice(type))
+                .isActive(true)
+                .paymentStatus(PaymentStatus.PAID)
+                .paymentMethod(paymentMethod)
+                .transactionId(transactionId)
+                .paidAt(LocalDateTime.now())
+                .build();
+        membershipRepository.save(membership);
+
+        emailService.sendMembershipConfirmation(
+                user.getEmail(), user.getFullName(), type.name(), end.toString());
+
+        return membership;
+    }
     @Transactional
     public MembershipResponse purchase(String email, MembershipRequest request) {
         User user = userRepository.findByEmail(email)
@@ -51,7 +88,7 @@ public class MembershipService {
         LocalDate start = request.getStartDate() != null ? request.getStartDate() : LocalDate.now();
         int months = DURATIONS_MONTHS.getOrDefault(request.getMembershipType(), 1);
         LocalDate end = start.plusMonths(months);
-        double price = PRICES.getOrDefault(request.getMembershipType(), 299000.0);
+        double price = PRICES.getOrDefault(request.getMembershipType(), 0.0);
 
         Membership membership = Membership.builder()
                 .user(user)

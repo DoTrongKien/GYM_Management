@@ -45,4 +45,8 @@ public class WorkoutPlanResponse {
     // Tiến độ tuần hiện tại
     private Integer enrolledThisWeek;
     private Integer completedThisWeek;
+
+    private Integer maxMana;
+    private Integer currentMana;
+    private String manaMessage;
 }

@@ -11,4 +11,6 @@ public class ExerciseLogResponse {
     private Double weightUsedKg;
     private Boolean isCompleted;
     private String notes;
+
+    private Integer completionPercent; // 0/25/50/75/100
 }

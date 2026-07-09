@@ -2,7 +2,6 @@
   <div class="fade-in">
     <div class="page-header">
       <h2>GÓI TẬP</h2>
-      <el-button type="primary" @click="purchaseDialog=true">🛒 MUA GÓI MỚI</el-button>
     </div>
 
     <!-- Active membership -->
@@ -10,7 +9,10 @@
       <div class="active-inner">
         <div>
           <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--c-accent);font-weight:700;margin-bottom:4px">GÓI ĐANG ACTIVE</div>
-          <div class="display" style="font-size:2rem;color:var(--c-text)">{{ active.membershipType }}</div>
+          <div class="display" style="font-size:2rem;color:var(--c-text)">
+            {{ active.membershipType }}
+            <span v-if="active.membershipType==='VIP'" class="vip-chip">👑 VIP</span>
+          </div>
           <div style="color:var(--c-text2);font-size:0.85rem;margin-top:4px">{{ active.startDate }} → {{ active.endDate }}</div>
           <div style="margin-top:10px">
             <span class="badge" :class="active.paymentStatus==='PAID'?'badge-success':'badge-warning'">
@@ -24,27 +26,42 @@
         </div>
       </div>
       <el-progress
+          v-if="active.membershipType!=='FREE'"
           :percentage="daysPercent" :color="active.daysRemaining < 7 ? '#C62828' : '#D4892A'"
           style="margin-top:16px" :show-text="false" :stroke-width="6"/>
     </el-card>
 
-    <!-- Package grid -->
-    <h3 class="display" style="font-size:1.4rem;color:var(--c-text-inv);margin-bottom:16px">CHỌN GÓI TẬP</h3>
+    <!-- Package grid: chỉ 2 gói - FREE (mặc định) và VIP (duy nhất trả phí) -->
+    <h3 class="display" style="font-size:1.4rem;color:var(--c-text-inv);margin-bottom:16px">GÓI TẬP</h3>
     <div class="packages-grid">
-      <div v-for="pkg in packages" :key="pkg.type"
-           class="pkg-card"
-           :class="{featured: pkg.featured, selected: form.membershipType===pkg.type}"
-           @click="form.membershipType=pkg.type"
-      >
-        <div v-if="pkg.featured" class="pkg-badge">PHỔ BIẾN</div>
-        <div class="pkg-type display">{{ pkg.type }}</div>
-        <div class="pkg-price"><span class="accent">{{ pkg.price }}</span> <span style="font-size:0.8rem;color:var(--c-text2)">đ/{{ pkg.duration }}</span></div>
+      <!-- FREE -->
+      <div class="pkg-card">
+        <div class="pkg-type display">FREE</div>
+        <div class="pkg-price"><span class="accent">0</span> <span style="font-size:0.8rem;color:var(--c-text2)">đ - mãi mãi</span></div>
         <ul class="pkg-features">
-          <li v-for="f in pkg.features" :key="f">✓ {{ f }}</li>
+          <li v-for="f in freeFeatures" :key="f">✓ {{ f }}</li>
+          <li class="limited">⚠ Giáo án: chỉ đổi 1 lần/tháng</li>
+          <li class="limited">⚠ Dinh dưỡng: gợi ý cơ bản</li>
         </ul>
-        <el-button :type="pkg.featured?'primary':'default'" style="width:100%;margin-top:auto"
-                   @click.stop="selectPkg(pkg)">
-          {{ form.membershipType===pkg.type ? '✓ Đã chọn' : 'Chọn gói' }}
+        <el-button style="width:100%;margin-top:auto" disabled>
+          {{ active && active.membershipType === 'FREE' ? '✓ Gói hiện tại' : 'Gói mặc định' }}
+        </el-button>
+      </div>
+
+      <!-- VIP -->
+      <div class="pkg-card featured">
+        <div class="pkg-badge">DUY NHẤT TRẢ PHÍ</div>
+        <div class="pkg-type display">VIP 👑</div>
+        <div class="pkg-price"><span class="accent">{{ vipPrice.toLocaleString() }}</span> <span style="font-size:0.8rem;color:var(--c-text2)">đ / tháng</span></div>
+        <ul class="pkg-features">
+          <li v-for="f in vipFeatures" :key="f">✓ {{ f }}</li>
+          <li class="highlight">⭐ Giáo án: KHÔNG GIỚI HẠN số lần đổi/tháng</li>
+          <li class="highlight">⭐ Dinh dưỡng: cá nhân hóa chi tiết (nhiều lựa chọn món + lưu ý riêng)</li>
+        </ul>
+        <el-button type="primary" style="width:100%;margin-top:auto"
+                   :disabled="active && active.membershipType==='VIP'"
+                   @click="purchaseDialog=true">
+          {{ active && active.membershipType==='VIP' ? '✓ Đang dùng VIP' : 'Nâng cấp lên VIP' }}
         </el-button>
       </div>
     </div>
@@ -53,7 +70,11 @@
     <el-card style="margin-top:24px">
       <template #header>LỊCH SỬ ĐĂNG KÝ</template>
       <el-table :data="memberships" stripe>
-        <el-table-column label="Loại gói" prop="membershipType" width="110"/>
+        <el-table-column label="Loại gói" width="110">
+          <template #default="{row}">
+            {{ row.membershipType }} <span v-if="row.membershipType==='VIP'">👑</span>
+          </template>
+        </el-table-column>
         <el-table-column label="Bắt đầu" prop="startDate" width="110"/>
         <el-table-column label="Kết thúc" prop="endDate" width="110"/>
         <el-table-column label="Giá (đ)" width="140" align="right">
@@ -68,31 +89,23 @@
       </el-table>
     </el-card>
 
-    <!-- Purchase Dialog -->
-    <el-dialog v-model="purchaseDialog" title="ĐĂNG KÝ GÓI TẬP" width="440px" align-center>
-      <el-form :model="form" label-position="top">
-        <el-form-item label="Gói tập">
-          <el-select v-model="form.membershipType" style="width:100%">
-            <el-option label="BASIC — 299,000đ / 1 tháng" value="BASIC"/>
-            <el-option label="STANDARD — 499,000đ / 3 tháng" value="STANDARD"/>
-            <el-option label="PREMIUM — 799,000đ / 6 tháng" value="PREMIUM"/>
-            <el-option label="VIP — 1,299,000đ / 12 tháng" value="VIP"/>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="Phương thức thanh toán">
-          <el-select v-model="form.paymentMethod" style="width:100%">
-            <el-option label="💳 Thẻ ngân hàng" value="CARD"/>
-            <el-option label="📱 MoMo" value="MOMO"/>
-            <el-option label="🏦 VNPay" value="VNPAY"/>
-            <el-option label="💚 ZaloPay" value="ZALOPAY"/>
-            <el-option label="💵 Tiền mặt tại quầy" value="CASH"/>
-          </el-select>
-        </el-form-item>
-        <div class="price-summary">
-          <span>Tổng thanh toán:</span>
-          <strong class="accent">{{ pkgPrice }} đ</strong>
-        </div>
-      </el-form>
+    <!-- Purchase Dialog - chỉ có 1 gói duy nhất để mua (VIP) -->
+    <el-dialog v-model="purchaseDialog" title="NÂNG CẤP LÊN GÓI VIP" width="420px" align-center>
+      <p style="color:var(--c-text2);font-size:0.85rem;margin-bottom:12px">
+        Gói VIP: giáo án tập không giới hạn số lần đổi/tháng + thực đơn dinh dưỡng cá nhân hóa chi tiết.
+      </p>
+      <el-form-item label="Phương thức thanh toán" style="margin-top:8px">
+        <el-select v-model="paymentMethod" style="width:100%">
+          <el-option label="💳 Thẻ ngân hàng" value="CARD"/>
+          <el-option label="📱 MoMo" value="MOMO"/>
+          <el-option label="🏦 VNPay" value="VNPAY"/>
+          <el-option label="💵 Tiền mặt tại quầy" value="CASH"/>
+        </el-select>
+      </el-form-item>
+      <div class="price-summary">
+        <span>Tổng thanh toán:</span>
+        <strong class="accent">{{ vipPrice.toLocaleString() }} đ</strong>
+      </div>
       <template #footer>
         <el-button @click="purchaseDialog=false">Hủy</el-button>
         <el-button type="primary" @click="purchase" :loading="purchasing">XÁC NHẬN ĐĂNG KÝ</el-button>
@@ -102,25 +115,22 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
-import { membershipAPI } from '@/api'
+import { ref, computed, onMounted } from 'vue'
+import { membershipAPI, invoiceAPI } from '@/api'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
 
-const memberships   = ref([])
-const active        = ref(null)
-const purchaseDialog= ref(false)
-const purchasing    = ref(false)
-const form = reactive({ membershipType:'STANDARD', paymentMethod:'MOMO' })
+const router = useRouter()
+const memberships    = ref([])
+const active         = ref(null)
+const purchaseDialog = ref(false)
+const purchasing     = ref(false)
+const paymentMethod  = ref('MOMO')
 
-const packages = [
-  { type:'BASIC',    price:'299,000',   duration:'tháng',  features:['Tập không giới hạn','Theo dõi tiến độ','Thư viện bài tập'], featured:false },
-  { type:'STANDARD', price:'499,000',   duration:'3 tháng',features:['Tất cả BASIC','Giáo án AI','Dinh dưỡng AI','Dashboard'], featured:true },
-  { type:'PREMIUM',  price:'799,000',   duration:'6 tháng',features:['Tất cả STANDARD','Phân tích nâng cao','Hỗ trợ ưu tiên'], featured:false },
-  { type:'VIP',      price:'1,299,000', duration:'năm',    features:['Tất cả tính năng','Tư vấn 1-1','Ưu đãi đặc biệt'], featured:false },
-]
+const vipPrice = 299000
 
-const priceMap = { BASIC:299000, STANDARD:499000, PREMIUM:799000, VIP:1299000 }
-const pkgPrice = computed(() => (priceMap[form.membershipType]||0).toLocaleString())
+const freeFeatures = ['Tập không giới hạn', 'Theo dõi tiến độ', 'Thư viện bài tập']
+const vipFeatures  = ['Tất cả tính năng gói Free', 'Dashboard đầy đủ']
 
 const daysPercent = computed(() => {
   if (!active.value) return 0
@@ -140,15 +150,16 @@ async function load() {
   } catch {}
 }
 
-function selectPkg(pkg) { form.membershipType = pkg.type; purchaseDialog.value = true }
-
 async function purchase() {
   purchasing.value = true
   try {
-    await membershipAPI.purchase(form)
-    ElMessage.success('Đăng ký thành công! Chờ admin xác nhận thanh toán.')
+    const response = await invoiceAPI.create('VIP')
+    const data = response.data
+    const invoiceId = data.id
     purchaseDialog.value = false
-    load()
+    if (invoiceId) {
+      router.push(`/app/payment/${invoiceId}`)
+    }
   } catch {} finally { purchasing.value = false }
 }
 
@@ -163,18 +174,16 @@ onMounted(load)
 .days-remain  { text-align:right; }
 .days-num  { font-family:var(--font-display); font-size:3rem; line-height:1; color:var(--c-accent); }
 .days-lbl  { font-size:0.75rem; color:var(--c-text3); text-transform:uppercase; letter-spacing:0.08em; }
+.vip-chip { font-size:0.9rem; background:var(--c-accent); color:#fff; padding:2px 10px; border-radius:20px; margin-left:8px; vertical-align:middle; }
 
-.packages-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:16px; margin-bottom:8px; }
+.packages-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px; margin-bottom:8px; max-width:600px; }
 .pkg-card {
   background:var(--c-card); border:2px solid var(--c-border2);
   border-radius:var(--radius-lg); padding:20px;
   display:flex; flex-direction:column; gap:8px;
-  cursor:pointer; transition: all var(--transition);
   position:relative; box-shadow:var(--shadow);
 }
-.pkg-card:hover   { border-color:var(--c-accent); box-shadow:var(--shadow-lg); }
 .pkg-card.featured{ border-color:var(--c-accent); }
-.pkg-card.selected{ border-color:var(--c-accent); background:#FFF8F0; }
 .pkg-badge {
   position:absolute; top:-10px; left:50%; transform:translateX(-50%);
   background:var(--c-accent); color:#fff; font-size:0.65rem; font-weight:700;
@@ -184,6 +193,8 @@ onMounted(load)
 .pkg-price { font-size:1.4rem; font-weight:700; }
 .pkg-features { list-style:none; padding:0; flex:1; }
 .pkg-features li { font-size:0.82rem; color:var(--c-text2); padding:3px 0; }
+.pkg-features li.limited { color:#b45309; }
+.pkg-features li.highlight { color:var(--c-accent); font-weight:600; }
 
 .price-summary {
   display:flex; justify-content:space-between; align-items:center;

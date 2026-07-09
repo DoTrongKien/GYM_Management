@@ -31,6 +31,12 @@
             <span :style="{color: scoreColor(row.enduranceScore), fontWeight:700}">{{ row.enduranceScore }}</span>
           </template>
         </el-table-column>
+        <!-- MỚI: cột thể lực tiêu hao -->
+        <el-table-column label="⚡ Thể lực" width="85" align="center">
+          <template #default="{row}">
+            <span style="color:#f59e0b;font-weight:700">{{ row.staminaCost ?? 10 }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="Trạng thái" width="95" align="center">
           <template #default="{row}">
             <span class="badge" :class="row.isActive?'badge-success':'badge-danger'">{{ row.isActive?'Active':'Ẩn' }}</span>
@@ -83,6 +89,19 @@
         <el-form-item label="Link video YouTube">
           <el-input v-model="form.videoUrl" placeholder="https://youtube.com/watch?v=..."/>
         </el-form-item>
+
+        <!-- MỚI: Thể lực (mana) tiêu hao khi tập bài này -->
+        <div class="stamina-box">
+          <div style="font-weight:700;color:#b45309;margin-bottom:4px">⚡ THỂ LỰC TIÊU HAO (0–200)</div>
+          <div style="font-size:0.78rem;color:var(--c-text3);margin-bottom:10px">
+            Số thể lực (mana) sẽ bị trừ khi người dùng tập bài này với tỉ lệ hoàn thành 100%.
+            Nếu hoàn thành thấp hơn, thể lực trừ sẽ tính theo tỉ lệ tương ứng.
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <el-slider v-model="form.staminaCost" :min="0" :max="200" :step="5" style="flex:1"/>
+            <span style="font-weight:700;width:50px;text-align:right;color:#f59e0b">{{ form.staminaCost }}</span>
+          </div>
+        </div>
 
         <!-- Điểm hiệu quả theo mục tiêu -->
         <div class="score-section">
@@ -142,7 +161,8 @@ const muscles    = ['CHEST','BACK','SHOULDERS','ARMS','LEGS','CORE','CARDIO','FU
 const defaultForm = () => ({
   name:'', description:'', muscleGroup:'CHEST', difficulty:'MEDIUM',
   defaultSets:3, defaultReps:10, caloriesBurned:8, videoUrl:'', restSeconds:60,
-  muscleGainScore:5, weightLossScore:5, enduranceScore:5, flexibilityScore:5, maintenanceScore:5
+  muscleGainScore:5, weightLossScore:5, enduranceScore:5, flexibilityScore:5, maintenanceScore:5,
+  staminaCost: 10
 })
 const form = reactive(defaultForm())
 
@@ -171,6 +191,7 @@ function openEdit(row) {
     enduranceScore:   row.enduranceScore   ?? 5,
     flexibilityScore: row.flexibilityScore ?? 5,
     maintenanceScore: row.maintenanceScore ?? 5,
+    staminaCost: row.staminaCost ?? 10,
   })
   formDialog.value = true
 }
@@ -213,4 +234,10 @@ onMounted(load)
 .score-input-label { width:90px; font-size:0.82rem; font-weight:600; color:var(--c-text2); flex-shrink:0; }
 .score-input-val   { width:38px; font-family:var(--font-mono); font-size:0.8rem; font-weight:700; text-align:right; flex-shrink:0; }
 .el-slider { flex:1; }
+
+/* MỚI */
+.stamina-box {
+  background:#fffbeb; border:1px solid #fde68a; border-radius:var(--radius-lg);
+  padding:14px; margin-top:14px;
+}
 </style>
