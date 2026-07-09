@@ -17,7 +17,12 @@
         <el-menu-item index="/app/membership"><el-icon><CreditCard/></el-icon><template #title>Gói tập</template></el-menu-item>
         <el-menu-item index="/app/exercises"><el-icon><Trophy/></el-icon><template #title>Bài tập</template></el-menu-item>
         <el-menu-item index="/app/ratings"><el-icon><Star/></el-icon><template #title>Đánh giá</template></el-menu-item>
-        <el-menu-item index="/app/chat"><el-icon><ChatDotRound/></el-icon><template #title>Trợ lý</template></el-menu-item>
+        <el-menu-item index="/app/chat">
+          <el-badge :value="unreadCount" :max="9" :hidden="!unreadCount" class="menu-badge">
+            <el-icon><ChatDotRound/></el-icon>
+          </el-badge>
+          <template #title>Trợ lý</template>
+        </el-menu-item>
       </el-menu>
 
       <div class="sidebar-bottom">
@@ -56,10 +61,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { membershipAPI } from '@/api'
+import { membershipAPI, supportAPI } from '@/api'
+import { ElNotification } from 'element-plus'
+import { setOtherRole, setSessions, unreadCount } from '@/stores/supportUnread'
 import NotificationBell from './NotificationBell.vue'
 
 const auth      = useAuthStore()
@@ -69,12 +76,58 @@ const collapsed = ref(false)
 const isVip     = ref(false)
 const initials  = computed(() => (auth.user?.fullName || 'U').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2))
 
+// ── Thông báo tin nhắn mới từ admin (hoạt động ở mọi trang) ──
+const lastMsgSeen = new Map()       // id phiên -> lastMessageAt đã thấy
+let firstSupportLoad = true
+let supportTimer = null
+
+setOtherRole('ADMIN')               // phía bên kia của user là admin
+
+async function pollSupport() {
+  try {
+    const res = await supportAPI.sessions()
+    const list = res.data || []
+    setSessions(list)               // cập nhật badge chưa đọc
+    const openIds = new Set(list.map(s => s.id))
+    list.forEach(s => {
+      const prevAt = lastMsgSeen.get(s.id)
+      if (s.lastMessageAt) {
+        // Bỏ qua khi đang ở trang chat — ChatView tự báo, tránh thông báo trùng
+        if (!firstSupportLoad && s.lastMessageRole === 'ADMIN' && prevAt
+            && new Date(s.lastMessageAt).getTime() > new Date(prevAt).getTime()
+            && route.path !== '/app/chat') {
+          notifyNewAdminMessage(s)
+        }
+        lastMsgSeen.set(s.id, s.lastMessageAt)
+      }
+    })
+    lastMsgSeen.forEach((_, id) => { if (!openIds.has(id)) lastMsgSeen.delete(id) })
+    firstSupportLoad = false
+  } catch {}
+}
+
+function notifyNewAdminMessage(s) {
+  const inst = ElNotification({
+    title: `💬 ${s.adminName || 'Admin'} vừa nhắn`,
+    type: 'success',
+    duration: 6000,
+    message: h('div', {
+      style: 'cursor:pointer',
+      onClick: () => { router.push('/app/chat'); inst.close() }
+    }, s.lastMessage || 'Đã gửi một tin nhắn')
+  })
+}
+
 onMounted(async () => {
   try {
     const res = await membershipAPI.getActive()
     isVip.value = res.data?.membershipType === 'VIP'
   } catch { isVip.value = false }
+  pollSupport()
+  supportTimer = setInterval(pollSupport, 5000)
 })
+
+onUnmounted(() => { if (supportTimer) clearInterval(supportTimer) })
 
 const titles = {
   '/app/dashboard':'Dashboard', '/app/profile':'Hồ sơ cá nhân',
@@ -144,4 +197,10 @@ const pageTitle = computed(() => titles[route.path] || 'GymPro')
 
 .page-enter-active,.page-leave-active { transition:opacity 0.2s; }
 .page-enter-from,.page-leave-to { opacity:0; }
+
+/* Badge đỏ số tin nhắn hỗ trợ chưa đọc trên menu item */
+.sidebar-menu .el-menu-item .menu-badge { display:inline-flex; align-items:center; }
+.sidebar-menu .el-menu-item .menu-badge :deep(.el-badge__content) {
+  top:4px; right:4px; border:none; font-family:var(--font-mono); font-size:0.62rem;
+}
 </style>

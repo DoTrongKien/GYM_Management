@@ -140,7 +140,7 @@ export const chatAPI = {
 
 // ── Chat với admin (User) ─────────────────────
 export const supportAPI = {
-    request:   (subject)     => api.post('/support/request', { subject }),
+    request:   (formData)    => api.post('/support/request', formData, { timeout: 120000 }),
     sessions:  ()            => api.get('/support/sessions'),
     messages:  (id)          => api.get(`/support/sessions/${id}/messages`),
     send:      (id, content) => api.post(`/support/sessions/${id}/messages`, { content }),

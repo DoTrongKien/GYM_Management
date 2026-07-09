@@ -38,6 +38,7 @@
               {{ s.lastMessage || (s.status === 'PENDING' ? 'Đang chờ admin…' : 'Bắt đầu trò chuyện') }}
             </div>
           </div>
+          <span v-if="isUnread(s)" class="unread-dot" title="Có tin nhắn mới"/>
           <el-tag size="small" :type="s.status === 'ACTIVE' ? 'success' : 'warning'" effect="plain" round>
             {{ s.status === 'ACTIVE' ? 'Đang chat' : 'Chờ' }}
           </el-tag>
@@ -77,7 +78,7 @@
 
             <div v-if="showSent" class="sent-status" :class="{ err: sendStatus === 'failed' }">{{ sentText }}</div>
 
-            <div v-if="!supportMessages.length && currentStatus === 'PENDING'" class="waiting-banner">
+            <div v-if="currentStatus === 'PENDING'" class="waiting-banner">
               <el-icon class="spin" :size="22"><Loading/></el-icon>
               <div>Yêu cầu đã được gửi. Đang chờ admin xác nhận để bắt đầu chat 1:1…</div>
             </div>
@@ -134,15 +135,49 @@
         </div>
       </el-card>
     </div>
+
+    <!-- Dialog tạo cuộc hội thoại mới với admin -->
+    <el-dialog v-model="newConvVisible" title="Cuộc hội thoại mới với admin" width="460px" append-to-body>
+      <el-form label-position="top" @submit.prevent>
+        <el-form-item label="Tiêu đề" required>
+          <el-input v-model="newConvSubject" maxlength="100" show-word-limit
+                    placeholder="VD: Hỏi về gói tập, thanh toán, lịch tập…"/>
+        </el-form-item>
+        <el-form-item label="Nội dung muốn trình bày">
+          <el-input v-model="newConvContent" type="textarea"
+                    :autosize="{ minRows: 4, maxRows: 10 }"
+                    placeholder="Mô tả chi tiết vấn đề… Bạn có thể dán link (tự thành liên kết bấm được) và đính kèm file bên dưới."/>
+        </el-form-item>
+        <el-form-item label="Đính kèm (tùy chọn)">
+          <input ref="convFileInput" type="file" hidden @change="onConvFile"/>
+          <el-button v-if="!newConvFile" plain @click="convFileInput?.click()">
+            <el-icon><Paperclip/></el-icon><span style="margin-left:6px">Chọn file</span>
+          </el-button>
+          <div v-else class="conv-file-chip">
+            <el-icon :size="18"><Document/></el-icon>
+            <span class="cf-name">{{ newConvFile.name }}</span>
+            <span class="cf-size">{{ prettyFileSize(newConvFile.size) }}</span>
+            <el-button text class="cf-remove" @click="newConvFile = null" title="Bỏ file">
+              <el-icon><Close/></el-icon>
+            </el-button>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="newConvVisible = false">Hủy</el-button>
+        <el-button type="primary" :loading="creating" @click="submitNewConversation">Gửi yêu cầu</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, h } from 'vue'
 import { chatAPI, supportAPI } from '@/api'
 import { useAuthStore } from '@/stores/auth'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElNotification } from 'element-plus'
 import MessageBody from '@/components/common/MessageBody.vue'
+import { setSessions, markRead, isUnread } from '@/stores/supportUnread'
 import dayjs from 'dayjs'
 
 const auth = useAuthStore()
@@ -160,6 +195,8 @@ const clearing    = ref(false)
 const sessions        = ref([])   // danh sách cuộc hội thoại đang mở
 const supportMessages = ref([])   // tin nhắn của cuộc đang chọn
 const prevStatuses    = new Map() // theo dõi PENDING → ACTIVE để báo
+const adminMsgSeen    = new Map() // id -> lastMessageAt đã thấy (phát hiện tin nhắn mới từ admin)
+let firstSessionsLoad = true
 
 const draft      = ref('')
 const sendStatus = ref(null)      // null | 'sending' | 'sent' | 'failed'
@@ -167,6 +204,14 @@ const scrollRef  = ref(null)
 const fileInput  = ref(null)
 const uploading  = ref(false)
 let pollTimer = null
+
+// Dialog tạo cuộc hội thoại mới
+const newConvVisible = ref(false)
+const newConvSubject = ref('')
+const newConvContent = ref('')
+const newConvFile    = ref(null)
+const convFileInput  = ref(null)
+const creating       = ref(false)
 
 const MAX_FILE = 50 * 1024 * 1024   // 50MB
 
@@ -260,11 +305,22 @@ async function loadSessions() {
   try {
     const res = await supportAPI.sessions()
     const list = res.data || []
+    setSessions(list)               // cập nhật badge chưa đọc
     list.forEach(s => {
       const prev = prevStatuses.get(s.id)
       if (prev === 'PENDING' && s.status === 'ACTIVE') {
         ElMessage.success(`Admin đã tham gia cuộc "${s.subject}"! 🎧`)
         if (activeConv.value === s.id) loadSessionMessages(s.id)
+      }
+      // Tin nhắn mới từ admin (chỉ báo khi không đang mở đúng cuộc đó)
+      const seenAt = adminMsgSeen.get(s.id)
+      if (s.lastMessageAt) {
+        if (!firstSessionsLoad && s.lastMessageRole === 'ADMIN' && seenAt
+            && new Date(s.lastMessageAt).getTime() > new Date(seenAt).getTime()
+            && activeConv.value !== s.id) {
+          notifyNewAdminMessage(s)
+        }
+        adminMsgSeen.set(s.id, s.lastMessageAt)
       }
       prevStatuses.set(s.id, s.status)
     })
@@ -275,7 +331,21 @@ async function loadSessions() {
       supportMessages.value = []
     }
     sessions.value = list
+    firstSessionsLoad = false
   } catch {}
+}
+
+// Thông báo khi admin gửi tin nhắn mới (bấm vào để mở cuộc hội thoại)
+function notifyNewAdminMessage(s) {
+  const inst = ElNotification({
+    title: `💬 ${s.adminName || 'Admin'} vừa nhắn`,
+    type: 'success',
+    duration: 5000,
+    message: h('div', {
+      style: 'cursor:pointer',
+      onClick: () => { selectConv(s.id); inst.close() }
+    }, s.lastMessage || 'Đã gửi một tin nhắn')
+  })
 }
 
 async function loadSessionMessages(id) {
@@ -283,23 +353,46 @@ async function loadSessionMessages(id) {
   catch {}
 }
 
-async function newConversation() {
+function newConversation() {
+  newConvSubject.value = ''
+  newConvContent.value = ''
+  newConvFile.value = null
+  newConvVisible.value = true
+}
+
+function onConvFile(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''                       // cho phép chọn lại cùng file
+  if (!file) return
+  if (file.size > MAX_FILE) { ElMessage.error('File tối đa 50MB'); return }
+  newConvFile.value = file
+}
+
+function prettyFileSize(b) {
+  if (b < 1024) return b + ' B'
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB'
+  return (b / 1024 / 1024).toFixed(1) + ' MB'
+}
+
+async function submitNewConversation() {
+  const subject = newConvSubject.value.trim()
+  if (!subject) { ElMessage.warning('Vui lòng nhập tiêu đề vấn đề cần hỗ trợ'); return }
+  creating.value = true
   try {
-    const { value } = await ElMessageBox.prompt(
-      'Bạn cần admin hỗ trợ vấn đề gì?', 'Cuộc hội thoại mới với admin',
-      {
-        confirmButtonText: 'Gửi yêu cầu',
-        cancelButtonText: 'Hủy',
-        inputPlaceholder: 'VD: Hỏi về gói tập, thanh toán, lịch tập…',
-        inputValidator: v => (v && v.trim()) ? true : 'Vui lòng nhập vấn đề cần hỗ trợ'
-      })
-    const res = await supportAPI.request(value.trim())
+    const fd = new FormData()
+    fd.append('subject', subject)
+    const content = newConvContent.value.trim()
+    if (content) fd.append('content', content)
+    if (newConvFile.value) fd.append('file', newConvFile.value)
+    const res = await supportAPI.request(fd)
     const s = res.data
     prevStatuses.set(s.id, s.status)
+    newConvVisible.value = false
     await loadSessions()
     await selectConv(s.id)
     ElMessage.success('Đã gửi yêu cầu, đang chờ admin xác nhận…')
-  } catch { /* người dùng bấm Hủy */ }
+  } catch { /* lỗi đã hiển thị qua interceptor */ }
+  finally { creating.value = false }
 }
 
 async function selectConv(target) {
@@ -307,6 +400,7 @@ async function selectConv(target) {
   sendStatus.value = null
   draft.value = ''
   if (target === 'bot') { scrollBottom(); return }
+  markRead(target)                  // mở xem → hết chưa đọc
   await loadSessionMessages(target)
 }
 
@@ -390,6 +484,7 @@ function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = 
 async function pollTick() {
   await loadSessions()
   if (isSupport.value && currentStatus.value === 'ACTIVE') {
+    markRead(activeConv.value)      // đang mở xem thì luôn coi là đã đọc
     await loadSessionMessages(activeConv.value)
   }
 }
@@ -423,6 +518,12 @@ onUnmounted(stopPolling)
   font-size:0.75rem; text-transform:uppercase; color:var(--c-text3);
 }
 .conv-empty { padding:10px 14px; font-size:0.8rem; color:var(--c-text3); line-height:1.5; }
+
+/* Chấm đỏ báo có tin nhắn chưa đọc */
+.unread-dot {
+  width:9px; height:9px; border-radius:50%; background:#f56c6c; flex-shrink:0;
+  box-shadow:0 0 0 3px rgba(245,108,108,0.18);
+}
 
 /* ── Khung chat ── */
 .chat-card { flex:1; min-width:0; overflow:hidden; display:flex; flex-direction:column; }
@@ -490,4 +591,14 @@ onUnmounted(stopPolling)
 .input-bar .el-input { flex:1; }
 .attach-btn { color:var(--c-text2) !important; padding:0 4px; }
 .attach-btn:hover { color:var(--c-accent) !important; }
+
+/* Chip file đã chọn trong dialog tạo cuộc hội thoại */
+.conv-file-chip {
+  display:flex; align-items:center; gap:8px; width:100%;
+  padding:8px 10px; border:1px solid var(--c-bg3); border-radius:8px; background:var(--c-bg2);
+}
+.cf-name { flex:1; min-width:0; font-size:0.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cf-size { font-size:0.72rem; color:var(--c-text3); flex-shrink:0; }
+.cf-remove { color:var(--c-text3) !important; padding:0 4px; }
+.cf-remove:hover { color:#c0392b !important; }
 </style>

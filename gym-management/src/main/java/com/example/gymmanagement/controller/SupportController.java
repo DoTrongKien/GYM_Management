@@ -1,7 +1,6 @@
 package com.example.gymmanagement.controller;
 
 import com.example.gymmanagement.dto.request.SupportMessageRequest;
-import com.example.gymmanagement.dto.request.SupportRequestRequest;
 import com.example.gymmanagement.dto.response.*;
 import com.example.gymmanagement.service.SupportChatService;
 import lombok.RequiredArgsConstructor;
@@ -20,14 +19,15 @@ public class SupportController {
 
     private final SupportChatService supportChatService;
 
-    // User tạo một cuộc hội thoại mới với admin (kèm tiêu đề vấn đề)
+    // User tạo một cuộc hội thoại mới với admin (kèm tiêu đề, nội dung và file đính kèm tùy chọn)
     @PostMapping("/request")
     public ResponseEntity<ApiResponse<SupportSessionResponse>> request(
             @AuthenticationPrincipal UserDetails userDetails,
-            @RequestBody(required = false) SupportRequestRequest request) {
-        String subject = request != null ? request.getSubject() : null;
+            @RequestParam(value = "subject", required = false) String subject,
+            @RequestParam(value = "content", required = false) String content,
+            @RequestParam(value = "file", required = false) MultipartFile file) {
         return ResponseEntity.ok(ApiResponse.success(
-                supportChatService.requestChat(userDetails.getUsername(), subject),
+                supportChatService.requestChat(userDetails.getUsername(), subject, content, file),
                 "Đã gửi yêu cầu, vui lòng chờ admin xác nhận"));
     }
 

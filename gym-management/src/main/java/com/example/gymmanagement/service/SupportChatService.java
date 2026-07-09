@@ -43,7 +43,7 @@ public class SupportChatService {
 
     /** User tạo một cuộc hội thoại mới với admin (cho phép nhiều cuộc về các vấn đề riêng). */
     @Transactional
-    public SupportSessionResponse requestChat(String email, String subject) {
+    public SupportSessionResponse requestChat(String email, String subject, String content, MultipartFile file) {
         User user = getUser(email);
         long openCount = sessionRepository
                 .findByUserIdAndStatusInOrderByCreatedAtDesc(user.getId(), OPEN).size();
@@ -58,7 +58,15 @@ public class SupportChatService {
                 .createdAt(LocalDateTime.now())
                 .build();
         sessionRepository.save(session);
-        return toSessionResponse(session, null);
+        // Nội dung user trình bày → lưu làm tin nhắn mở đầu (admin thấy ngay trong thông báo)
+        if (content != null && !content.trim().isEmpty()) {
+            saveMessage(session, "USER", content);
+        }
+        // File đính kèm (nếu có) — lưu ngay lúc gửi yêu cầu, kể cả khi phiên còn PENDING
+        if (file != null && !file.isEmpty()) {
+            saveAttachment(session, "USER", file, null);
+        }
+        return toSessionResponse(session);
     }
 
     /** Danh sách các cuộc hội thoại đang mở của user (PENDING/ACTIVE). */
@@ -66,7 +74,7 @@ public class SupportChatService {
         User user = getUser(email);
         return sessionRepository.findByUserIdAndStatusInOrderByCreatedAtDesc(user.getId(), OPEN)
                 .stream()
-                .map(s -> toSessionResponse(s, lastMessageOf(s.getId())))
+                .map(this::toSessionResponse)
                 .collect(Collectors.toList());
     }
 
@@ -122,7 +130,7 @@ public class SupportChatService {
     public List<SupportSessionResponse> listOpenSessions() {
         return sessionRepository.findByStatusInOrderByCreatedAtDesc(OPEN)
                 .stream()
-                .map(s -> toSessionResponse(s, lastMessageOf(s.getId())))
+                .map(this::toSessionResponse)
                 .collect(Collectors.toList());
     }
 
@@ -137,9 +145,12 @@ public class SupportChatService {
         session.setAdmin(admin);
         session.setAcceptedAt(LocalDateTime.now());
         sessionRepository.save(session);
-        // Tin nhắn hệ thống mở đầu
-        saveMessage(session, "ADMIN", "Xin chào! Admin đã tham gia cuộc trò chuyện, mình có thể giúp gì cho bạn?");
-        return toSessionResponse(session, null);
+        // Tin nhắn chào mừng — hiển thị TRÊN nội dung user trình bày:
+        // gán createdAt sớm hơn tin nhắn đầu tiên 1 giây để nó luôn sắp lên đầu.
+        LocalDateTime firstMsg = firstMessageTime(session.getId());
+        LocalDateTime greetingTime = (firstMsg != null ? firstMsg : session.getCreatedAt()).minusSeconds(1);
+        saveMessageAt(session, "ADMIN", "Xin chào! Admin đã tham gia cuộc trò chuyện, mình có thể giúp gì cho bạn?", greetingTime);
+        return toSessionResponse(session);
     }
 
     @Transactional
@@ -193,14 +204,25 @@ public class SupportChatService {
         if (content == null || content.trim().isEmpty()) {
             throw new RuntimeException("Tin nhắn không được để trống");
         }
+        return saveMessageAt(session, role, content, LocalDateTime.now());
+    }
+
+    /** Lưu tin nhắn với thời điểm chỉ định (dùng để ép thứ tự hiển thị). */
+    private SupportMessageResponse saveMessageAt(SupportSession session, String role, String content, LocalDateTime createdAt) {
         SupportMessage msg = SupportMessage.builder()
                 .session(session)
                 .senderRole(role)
                 .content(content.trim())
-                .createdAt(LocalDateTime.now())
+                .createdAt(createdAt)
                 .build();
         messageRepository.save(msg);
         return toMessageResponse(msg);
+    }
+
+    /** Thời điểm tin nhắn sớm nhất của phiên (null nếu chưa có tin nhắn nào). */
+    private LocalDateTime firstMessageTime(Long sessionId) {
+        List<SupportMessage> list = messageRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
+        return list.isEmpty() ? null : list.get(0).getCreatedAt();
     }
 
     private SupportMessageResponse saveAttachment(SupportSession session, String role, MultipartFile file, String caption) {
@@ -219,10 +241,15 @@ public class SupportChatService {
         return toMessageResponse(msg);
     }
 
-    private String lastMessageOf(Long sessionId) {
+    /** Tin nhắn cuối cùng của phiên (null nếu chưa có). */
+    private SupportMessage lastMessageEntity(Long sessionId) {
         List<SupportMessage> list = messageRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
-        if (list.isEmpty()) return null;
-        SupportMessage last = list.get(list.size() - 1);
+        return list.isEmpty() ? null : list.get(list.size() - 1);
+    }
+
+    /** Rút gọn tin nhắn cuối thành text để hiển thị trong danh sách / thông báo. */
+    private String lastMessageText(SupportMessage last) {
+        if (last == null) return null;
         if (last.getContent() != null && !last.getContent().isEmpty()) return last.getContent();
         if (last.getAttachmentUrl() != null) return "📎 " + (last.getAttachmentName() != null ? last.getAttachmentName() : "Tệp đính kèm");
         return null;
@@ -238,7 +265,8 @@ public class SupportChatService {
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy phiên chat"));
     }
 
-    private SupportSessionResponse toSessionResponse(SupportSession s, String lastMessage) {
+    private SupportSessionResponse toSessionResponse(SupportSession s) {
+        SupportMessage last = lastMessageEntity(s.getId());
         return SupportSessionResponse.builder()
                 .id(s.getId())
                 .userId(s.getUser() != null ? s.getUser().getId() : null)
@@ -249,7 +277,9 @@ public class SupportChatService {
                 .status(s.getStatus().name())
                 .createdAt(s.getCreatedAt())
                 .acceptedAt(s.getAcceptedAt())
-                .lastMessage(lastMessage)
+                .lastMessage(lastMessageText(last))
+                .lastMessageAt(last != null ? last.getCreatedAt() : null)
+                .lastMessageRole(last != null ? last.getSenderRole() : null)
                 .build();
     }
 
