@@ -11,6 +11,7 @@
         <el-menu-item index="/admin/dashboard"><el-icon><DataAnalysis/></el-icon><template #title>Dashboard</template></el-menu-item>
         <el-menu-item index="/admin/users"><el-icon><UserFilled/></el-icon><template #title>Người dùng</template></el-menu-item>
         <el-menu-item index="/admin/memberships"><el-icon><CreditCard/></el-icon><template #title>Hóa đơn</template></el-menu-item>
+        <el-menu-item index="/admin/invoices"><el-icon><Tickets/></el-icon><template #title>Lịch sử giao dịch</template></el-menu-item>
         <el-menu-item index="/admin/exercises"><el-icon><Trophy/></el-icon><template #title>Bài tập</template></el-menu-item>
         <el-menu-item index="/admin/plans"><el-icon><Calendar/></el-icon><template #title>Giáo án</template></el-menu-item>
         <el-menu-item index="/admin/ratings"><el-icon><Star/></el-icon><template #title>Đánh giá</template></el-menu-item>

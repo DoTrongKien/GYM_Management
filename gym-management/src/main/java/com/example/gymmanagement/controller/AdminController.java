@@ -32,6 +32,7 @@ public class AdminController {
     private final WorkoutPlanDayRepository workoutPlanDayRepository;
     private final UserProfileService userProfileService;
     private final BCryptPasswordEncoder passwordEncoder;
+    private final InvoiceService invoiceService;
 
     // ─── Dashboard ───────────────────────────────────────────
     @GetMapping("/dashboard")
@@ -109,6 +110,16 @@ public class AdminController {
     @GetMapping("/memberships")
     public ResponseEntity<ApiResponse<List<MembershipResponse>>> getAllMemberships() {
         return ResponseEntity.ok(ApiResponse.success(membershipService.getAllMemberships()));
+    }
+    // ─── Lịch sử giao dịch (Invoice) - cho admin xem & tìm kiếm ──
+    @GetMapping("/invoices")
+    public ResponseEntity<ApiResponse<List<InvoiceResponse>>> getAllInvoices() {
+        return ResponseEntity.ok(ApiResponse.success(invoiceService.getAllInvoices()));
+    }
+
+    @GetMapping("/invoices/user/{userId}")
+    public ResponseEntity<ApiResponse<List<InvoiceResponse>>> getInvoicesOfUser(@PathVariable Long userId) {
+        return ResponseEntity.ok(ApiResponse.success(invoiceService.getInvoiceByUserId(userId)));
     }
 
     @GetMapping("/memberships/pending")

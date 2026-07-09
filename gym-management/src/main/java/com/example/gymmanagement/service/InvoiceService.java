@@ -206,6 +206,10 @@ public class InvoiceService {
         return invoiceRepository.findAllByOrderByCreatedAtDesc()
                 .stream().map(this::buildResponse).collect(Collectors.toList());
     }
+    public List<InvoiceResponse> getInvoiceByUserId(Long userId){
+        return invoiceRepository.findByUserIdOrderByCreatedAtDesc(userId)
+                .stream().map(this::buildResponse).collect(Collectors.toList());
+    }
 
     private Invoice getOwnedInvoice(Long id, String email) {
         Invoice invoice = invoiceRepository.findById(id)
