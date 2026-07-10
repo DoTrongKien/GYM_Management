@@ -120,13 +120,19 @@ export const exerciseAPI = {
 
 // ── Ratings ───────────────────────────────────
 export const ratingAPI = {
-    add:          (data)         => api.post('/ratings', data),
+    // formData: rating, comment, serviceType, isPublic, file (tùy chọn)
+    add:          (formData)     => api.post('/ratings', formData, { timeout: 120000 }),
+    // formData: như trên + removeAttachment
+    update:       (id, formData) => api.put(`/ratings/${id}`, formData, { timeout: 120000 }),
+    remove:       (id)           => api.delete(`/ratings/${id}`),
     getPublic:    ()             => api.get('/ratings/public'),
     getMy:        ()             => api.get('/ratings/my'),
     getAverages:  ()             => api.get('/ratings/averages'),
     // Admin
     getAll:       ()             => api.get('/ratings/admin/all'),
-    adminReply:   (id, reply)    => api.post(`/ratings/admin/${id}/reply`, { reply })
+    // formData: reply, file (tùy chọn), removeAttachment
+    adminReply:   (id, formData) => api.post(`/ratings/admin/${id}/reply`, formData, { timeout: 120000 }),
+    adminRemove:  (id)           => api.delete(`/ratings/admin/${id}`)
 }
 
 // ── Chat với bot ──────────────────────────────
@@ -151,6 +157,8 @@ export const supportAPI = {
 // ── Chat với user (Admin) ─────────────────────
 export const adminSupportAPI = {
     sessions: ()             => api.get('/admin/support/sessions'),
+    // formData: userId, subject, content, file (tùy chọn)
+    start:    (formData)     => api.post('/admin/support/start', formData, { timeout: 120000 }),
     accept:   (id)           => api.post(`/admin/support/${id}/accept`),
     reject:   (id)           => api.post(`/admin/support/${id}/reject`),
     close:    (id)           => api.post(`/admin/support/${id}/close`),

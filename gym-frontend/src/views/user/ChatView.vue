@@ -172,7 +172,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, h } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch, h } from 'vue'
+import { useRoute } from 'vue-router'
 import { chatAPI, supportAPI } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage, ElNotification } from 'element-plus'
@@ -180,7 +181,8 @@ import MessageBody from '@/components/common/MessageBody.vue'
 import { setSessions, markRead, isUnread } from '@/stores/supportUnread'
 import dayjs from 'dayjs'
 
-const auth = useAuthStore()
+const auth  = useAuthStore()
+const route = useRoute()
 
 // 'bot' hoặc id (number) của một cuộc hội thoại với admin
 const activeConv = ref('bot')
@@ -492,7 +494,25 @@ async function pollTick() {
 function scrollBottom() { nextTick(() => { const el = scrollRef.value; if (el) el.scrollTop = el.scrollHeight }) }
 function fmtTime(d) { return d ? dayjs(d).format('HH:mm') : '' }
 
-onMounted(async () => { await loadBot(); await loadSessions(); startPolling(); scrollBottom() })
+/** Mở phiên chat mà thông báo trỏ đến (?session=<id>). */
+function openSessionFromRoute() {
+  const id = Number(route.query.session)
+  if (!id) return
+  // Phiên đã đóng thì không còn trong danh sách đang mở
+  if (sessions.value.find(s => s.id === id)) selectConv(id)
+  else ElMessage.info('Cuộc trò chuyện này không còn mở')
+}
+
+// Bấm thông báo khác khi đang ở sẵn trang này
+watch(() => route.query.session, openSessionFromRoute)
+
+onMounted(async () => {
+  await loadBot()
+  await loadSessions()
+  openSessionFromRoute()
+  startPolling()
+  scrollBottom()
+})
 onUnmounted(stopPolling)
 </script>
 

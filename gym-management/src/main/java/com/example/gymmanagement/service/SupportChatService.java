@@ -16,7 +16,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -31,6 +33,7 @@ public class SupportChatService {
     private final SupportMessageRepository messageRepository;
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
+    private final NotificationService notificationService;
 
     private static final List<SupportStatus> OPEN = Arrays.asList(SupportStatus.PENDING, SupportStatus.ACTIVE);
 
@@ -66,6 +69,15 @@ public class SupportChatService {
         if (file != null && !file.isEmpty()) {
             saveAttachment(session, "USER", file, null);
         }
+
+        // Phiên còn PENDING nên chưa có admin phụ trách → báo cho tất cả admin
+        String name = user.getFullName() != null ? user.getFullName() : user.getEmail();
+        userRepository.findAllActiveAdmins().forEach(admin ->
+                notificationService.sendToUser(admin.getId(),
+                        "🆘 Yêu cầu hỗ trợ mới",
+                        name + ": " + subj,
+                        "SYSTEM", "SUPPORT", session.getId()));
+
         return toSessionResponse(session);
     }
 
@@ -90,7 +102,9 @@ public class SupportChatService {
         if (session.getStatus() != SupportStatus.ACTIVE) {
             throw new RuntimeException("Đang chờ admin xác nhận, chưa thể gửi tin nhắn");
         }
-        return saveMessage(session, "USER", content);
+        SupportMessageResponse msg = saveMessage(session, "USER", content);
+        notifyNewMessage(session, "USER", msg);
+        return msg;
     }
 
     /** User gửi file đính kèm (kèm chú thích tùy chọn). */
@@ -100,7 +114,9 @@ public class SupportChatService {
         if (session.getStatus() != SupportStatus.ACTIVE) {
             throw new RuntimeException("Đang chờ admin xác nhận, chưa thể gửi tin nhắn");
         }
-        return saveAttachment(session, "USER", file, caption);
+        SupportMessageResponse msg = saveAttachment(session, "USER", file, caption);
+        notifyNewMessage(session, "USER", msg);
+        return msg;
     }
 
     /** User tự kết thúc một cuộc hội thoại của mình. */
@@ -110,6 +126,10 @@ public class SupportChatService {
         session.setStatus(SupportStatus.CLOSED);
         session.setClosedAt(LocalDateTime.now());
         sessionRepository.save(session);
+
+        User user = session.getUser();
+        String name = user != null && user.getFullName() != null ? user.getFullName() : "Người dùng";
+        notifyClosed(session, "Người dùng " + name + " đã kết thúc cuộc trò chuyện", null);
     }
 
     /** Lấy phiên và đảm bảo nó thuộc về user hiện tại. */
@@ -125,6 +145,48 @@ public class SupportChatService {
     // ══════════════════════════════════════════════
     //  ADMIN
     // ══════════════════════════════════════════════
+
+    /**
+     * Admin chủ động mở một cuộc trò chuyện với user bất kỳ.
+     * Phiên vào thẳng ACTIVE (không qua PENDING) vì chính admin là người khởi xướng,
+     * không có gì để admin phải "chấp nhận" nữa.
+     */
+    @Transactional
+    public SupportSessionResponse startChatWithUser(String adminEmail, Long userId, String subject,
+                                                    String content, MultipartFile file) {
+        User admin = getUser(adminEmail);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng"));
+
+        boolean hasFile = file != null && !file.isEmpty();
+        if ((content == null || content.trim().isEmpty()) && !hasFile) {
+            throw new RuntimeException("Tin nhắn không được để trống");
+        }
+
+        String subj = (subject == null || subject.trim().isEmpty()) ? "Thông báo từ admin" : subject.trim();
+        LocalDateTime now = LocalDateTime.now();
+        SupportSession session = SupportSession.builder()
+                .user(user)
+                .admin(admin)
+                .subject(subj)
+                .status(SupportStatus.ACTIVE)
+                .createdAt(now)
+                .acceptedAt(now)
+                .build();
+        sessionRepository.save(session);
+
+        if (content != null && !content.trim().isEmpty()) {
+            saveMessage(session, "ADMIN", content);
+        }
+        if (hasFile) {
+            saveAttachment(session, "ADMIN", file, null);
+        }
+
+        notificationService.sendToUser(user.getId(),
+                "💬 Admin đã nhắn tin cho bạn", subj, "SYSTEM", "SUPPORT", session.getId());
+
+        return toSessionResponse(session);
+    }
 
     /** Danh sách các phiên đang chờ + đang hoạt động (cho admin). */
     public List<SupportSessionResponse> listOpenSessions() {
@@ -150,6 +212,11 @@ public class SupportChatService {
         LocalDateTime firstMsg = firstMessageTime(session.getId());
         LocalDateTime greetingTime = (firstMsg != null ? firstMsg : session.getCreatedAt()).minusSeconds(1);
         saveMessageAt(session, "ADMIN", "Xin chào! Admin đã tham gia cuộc trò chuyện, mình có thể giúp gì cho bạn?", greetingTime);
+
+        notificationService.sendToUser(session.getUser().getId(),
+                "💬 " + adminLabel(admin) + " đã tham gia cuộc trò chuyện",
+                session.getSubject(), "SYSTEM", "SUPPORT", session.getId());
+
         return toSessionResponse(session);
     }
 
@@ -165,11 +232,14 @@ public class SupportChatService {
     }
 
     @Transactional
-    public void close(Long sessionId) {
+    public void close(String adminEmail, Long sessionId) {
+        User admin = getUser(adminEmail);
         SupportSession session = getSession(sessionId);
         session.setStatus(SupportStatus.CLOSED);
         session.setClosedAt(LocalDateTime.now());
         sessionRepository.save(session);
+
+        notifyClosed(session, adminLabel(admin) + " đã kết thúc cuộc trò chuyện", admin);
     }
 
     public List<SupportMessageResponse> getSessionMessages(Long sessionId) {
@@ -183,7 +253,9 @@ public class SupportChatService {
         if (session.getStatus() != SupportStatus.ACTIVE) {
             throw new RuntimeException("Phiên chat không còn hoạt động");
         }
-        return saveMessage(session, "ADMIN", content);
+        SupportMessageResponse msg = saveMessage(session, "ADMIN", content);
+        notifyNewMessage(session, "ADMIN", msg);
+        return msg;
     }
 
     /** Admin gửi file đính kèm (kèm chú thích tùy chọn). */
@@ -193,7 +265,9 @@ public class SupportChatService {
         if (session.getStatus() != SupportStatus.ACTIVE) {
             throw new RuntimeException("Phiên chat không còn hoạt động");
         }
-        return saveAttachment(session, "ADMIN", file, caption);
+        SupportMessageResponse msg = saveAttachment(session, "ADMIN", file, caption);
+        notifyNewMessage(session, "ADMIN", msg);
+        return msg;
     }
 
     // ══════════════════════════════════════════════
@@ -253,6 +327,61 @@ public class SupportChatService {
         if (last.getContent() != null && !last.getContent().isEmpty()) return last.getContent();
         if (last.getAttachmentUrl() != null) return "📎 " + (last.getAttachmentName() != null ? last.getAttachmentName() : "Tệp đính kèm");
         return null;
+    }
+
+    /**
+     * Báo cho phía bên kia biết vừa có tin nhắn mới, bấm vào là mở đúng phiên chat.
+     * Tin do USER gửi → báo admin phụ trách (phiên PENDING chưa có admin thì bỏ qua,
+     * vì lúc tạo yêu cầu mọi admin đã được báo rồi).
+     */
+    private void notifyNewMessage(SupportSession session, String senderRole, SupportMessageResponse msg) {
+        String preview = msg.getContent() != null && !msg.getContent().isBlank()
+                ? shorten(msg.getContent(), 80)
+                : "📎 " + (msg.getAttachmentName() != null ? msg.getAttachmentName() : "Tệp đính kèm");
+
+        if ("USER".equals(senderRole)) {
+            if (session.getAdmin() == null) return;
+            String name = session.getUser().getFullName() != null
+                    ? session.getUser().getFullName() : session.getUser().getEmail();
+            notificationService.sendToUser(session.getAdmin().getId(),
+                    "💬 " + name + " đã gửi tin nhắn", preview, "SYSTEM", "SUPPORT", session.getId());
+        } else {
+            notificationService.sendToUser(session.getUser().getId(),
+                    "💬 " + adminLabel(session.getAdmin()) + " đã gửi tin nhắn",
+                    preview, "SYSTEM", "SUPPORT", session.getId());
+        }
+    }
+
+    /** Cắt bớt nội dung dài để thông báo không quá dài. */
+    private String shorten(String text, int max) {
+        String s = text.trim();
+        return s.length() <= max ? s : s.substring(0, max) + "…";
+    }
+
+    /** Xưng hô cho admin: tránh lặp thành "Admin Admin" khi tên đã chứa sẵn chữ Admin. */
+    private String adminLabel(User admin) {
+        if (admin == null) return "Admin";
+        String name = admin.getFullName();
+        if (name == null || name.isBlank()) return "Admin";
+        return name.toLowerCase().startsWith("admin") ? name : "Admin " + name;
+    }
+
+    /**
+     * Báo cho cả hai phía rằng cuộc trò chuyện đã kết thúc.
+     *
+     * @param actingAdmin admin vừa bấm kết thúc (null nếu chính user kết thúc). Cần truyền riêng
+     *                    vì admin có thể đóng một phiên còn PENDING mà mình chưa nhận.
+     */
+    private void notifyClosed(SupportSession session, String message, User actingAdmin) {
+        String title = "🔚 Cuộc trò chuyện đã kết thúc";
+        String full = message + (session.getSubject() != null ? " \"" + session.getSubject() + "\"" : "");
+
+        Set<Long> recipients = new LinkedHashSet<>();
+        if (session.getUser() != null)  recipients.add(session.getUser().getId());
+        if (session.getAdmin() != null) recipients.add(session.getAdmin().getId());
+        if (actingAdmin != null)        recipients.add(actingAdmin.getId());
+
+        recipients.forEach(id -> notificationService.sendToUser(id, title, full, "SYSTEM"));
     }
 
     private User getUser(String email) {
