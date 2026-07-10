@@ -173,6 +173,12 @@ const router = createRouter({
                     component: () =>
                         import('@/views/admin/MembershipsView.vue')
                 },
+                {
+                    path: 'invoices',
+                    name: 'AdminInvoices',
+                    component: () =>
+                        import('@/views/admin/InvoiceHistoryView.vue')
+                },
 
                 {
                     path: 'exercises',

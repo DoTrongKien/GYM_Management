@@ -49,6 +49,12 @@
         <div style="flex:1"/>
         <NotificationBell/>
       </header>
+
+      <div v-if="pendingInvoice && !route.path.startsWith('/app/payment')" class="pending-payment-banner">
+        <span>⏳ Bạn có hóa đơn <strong>#{{ pendingInvoice.id }}</strong> ({{ pendingInvoice.membershipType }} - {{ formatMoney(pendingInvoice.price) }}) đang chờ thanh toán</span>
+        <el-button size="small" type="primary" @click="goContinuePayment">Tiếp tục thanh toán</el-button>
+      </div>
+
       <main class="page-content">
         <router-view v-slot="{ Component }">
           <transition name="page" mode="out-in">
@@ -61,10 +67,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, h } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { membershipAPI, supportAPI } from '@/api'
+import { membershipAPI, supportAPI, invoiceAPI } from '@/api'
 import { ElNotification } from 'element-plus'
 import { setOtherRole, setSessions, unreadCount } from '@/stores/supportUnread'
 import NotificationBell from './NotificationBell.vue'
@@ -75,6 +81,25 @@ const router    = useRouter()
 const collapsed = ref(false)
 const isVip     = ref(false)
 const initials  = computed(() => (auth.user?.fullName || 'U').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2))
+
+// ── Hóa đơn đang chờ thanh toán (hiện banner ở mọi trang trừ trang thanh toán) ──
+const pendingInvoice = ref(null)
+
+async function checkPendingInvoice() {
+  try {
+    const res = await invoiceAPI.getAll()
+    const list = res.data || []
+    pendingInvoice.value = list.find(i => i.status === 'PENDING') || null
+  } catch { pendingInvoice.value = null }
+}
+
+function goContinuePayment() {
+  router.push(`/app/payment/${pendingInvoice.value.id}`)
+}
+
+function formatMoney(val) {
+  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val)
+}
 
 // ── Thông báo tin nhắn mới từ admin (hoạt động ở mọi trang) ──
 const lastMsgSeen = new Map()       // id phiên -> lastMessageAt đã thấy
@@ -125,9 +150,16 @@ onMounted(async () => {
   } catch { isVip.value = false }
   pollSupport()
   supportTimer = setInterval(pollSupport, 5000)
+  checkPendingInvoice()
 })
 
 onUnmounted(() => { if (supportTimer) clearInterval(supportTimer) })
+
+// Mỗi lần rời trang thanh toán sang trang khác -> refetch để cập nhật banner
+// (vd: vừa thanh toán xong / vừa hủy hóa đơn thì banner phải biến mất)
+watch(() => route.path, (path) => {
+  if (!path.startsWith('/app/payment')) checkPendingInvoice()
+})
 
 const titles = {
   '/app/dashboard':'Dashboard', '/app/profile':'Hồ sơ cá nhân',
@@ -192,6 +224,12 @@ const pageTitle = computed(() => titles[route.path] || 'GymPro')
 }
 .toggle-btn { color:var(--c-text-inv2) !important; }
 .topbar-title { font-size:1.1rem; color:var(--c-text-inv); letter-spacing:0.08em; }
+
+.pending-payment-banner {
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:10px 24px; background:#fffbf0; border-bottom:1px solid #f5c518;
+  color:#7a5c00; font-size:0.85rem; flex-shrink:0;
+}
 
 .page-content { flex:1; overflow-y:auto; padding:28px; background:var(--c-bg); }
 
