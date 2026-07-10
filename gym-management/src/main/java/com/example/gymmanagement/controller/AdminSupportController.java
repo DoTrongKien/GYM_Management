@@ -27,6 +27,19 @@ public class AdminSupportController {
         return ResponseEntity.ok(ApiResponse.success(supportChatService.listOpenSessions()));
     }
 
+    // Admin chủ động mở cuộc trò chuyện với một user (kèm file đính kèm tùy chọn)
+    @PostMapping("/start")
+    public ResponseEntity<ApiResponse<SupportSessionResponse>> start(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestParam Long userId,
+            @RequestParam(value = "subject", required = false) String subject,
+            @RequestParam(value = "content", required = false) String content,
+            @RequestParam(value = "file", required = false) MultipartFile file) {
+        return ResponseEntity.ok(ApiResponse.success(
+                supportChatService.startChatWithUser(userDetails.getUsername(), userId, subject, content, file),
+                "Đã gửi tin nhắn tới người dùng"));
+    }
+
     @PostMapping("/{id}/accept")
     public ResponseEntity<ApiResponse<SupportSessionResponse>> accept(
             @AuthenticationPrincipal UserDetails userDetails,
@@ -43,8 +56,10 @@ public class AdminSupportController {
     }
 
     @PostMapping("/{id}/close")
-    public ResponseEntity<ApiResponse<String>> close(@PathVariable Long id) {
-        supportChatService.close(id);
+    public ResponseEntity<ApiResponse<String>> close(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable Long id) {
+        supportChatService.close(userDetails.getUsername(), id);
         return ResponseEntity.ok(ApiResponse.success("OK", "Đã kết thúc phiên chat"));
     }
 

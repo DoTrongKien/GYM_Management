@@ -46,7 +46,8 @@
         </el-button>
         <div class="topbar-title display">ADMIN PANEL</div>
         <div style="flex:1"/>
-        <el-tag type="warning" size="small" style="font-family:var(--font-mono);font-size:0.7rem">ADMIN</el-tag>
+        <NotificationBell/>
+        <el-tag type="warning" size="small" style="font-family:var(--font-mono);font-size:0.7rem;margin-left:12px">ADMIN</el-tag>
       </header>
       <main class="page-content">
         <router-view v-slot="{ Component }">
@@ -66,6 +67,7 @@ import { useAuthStore } from '@/stores/auth'
 import { adminSupportAPI } from '@/api'
 import { ElNotification, ElButton, ElMessage } from 'element-plus'
 import { setOtherRole, setSessions, unreadCount } from '@/stores/supportUnread'
+import NotificationBell from './NotificationBell.vue'
 
 const auth = useAuthStore()
 const route = useRoute()

@@ -34,9 +34,16 @@ public class NotificationService {
     }
 
     public void sendToUser(Long userId, String title, String message, String type) {
+        sendToUser(userId, title, message, type, null, null);
+    }
+
+    /** Gửi thông báo có gắn tham chiếu, để người nhận bấm vào là mở đúng đối tượng. */
+    public void sendToUser(Long userId, String title, String message, String type,
+                           String refType, Long refId) {
         User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
         Notification notification = Notification.builder()
                 .user(user).title(title).message(message).type(type)
+                .refType(refType).refId(refId)
                 .sentAt(LocalDateTime.now()).build();
         notificationRepository.save(notification);
     }

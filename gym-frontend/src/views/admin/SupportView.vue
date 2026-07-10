@@ -2,10 +2,54 @@
   <div class="fade-in">
     <div class="page-header">
       <h2>HỖ TRỢ / CHAT VỚI USER</h2>
-      <el-tag v-if="pending.length" type="warning" effect="dark" round>
-        {{ pending.length }} yêu cầu chờ
-      </el-tag>
+      <div style="display:flex;gap:10px;align-items:center">
+        <el-tag v-if="pending.length" type="warning" effect="dark" round>
+          {{ pending.length }} yêu cầu chờ
+        </el-tag>
+        <el-button type="primary" @click="openStartDialog">✉️ Nhắn tin cho user</el-button>
+      </div>
     </div>
+
+    <!-- Input chọn file cho dialog nhắn tin -->
+    <input ref="startFileInput" type="file" hidden @change="onStartFile"/>
+
+    <!-- Admin chủ động mở cuộc trò chuyện -->
+    <el-dialog v-model="startDialog" title="NHẮN TIN CHO USER" width="480px" align-center>
+      <el-form :model="startForm" label-position="top">
+        <el-form-item label="Người nhận">
+          <el-select v-model="startForm.userId" filterable style="width:100%"
+                     placeholder="Tìm theo tên hoặc email" :loading="loadingUsers">
+            <el-option v-for="u in users" :key="u.id"
+                       :label="`${u.fullName || 'Không tên'} — ${u.email}`" :value="u.id"/>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="Tiêu đề">
+          <el-input v-model="startForm.subject" maxlength="120"
+                    placeholder="Ví dụ: Nhắc gia hạn gói tập (không bắt buộc)"/>
+        </el-form-item>
+        <el-form-item label="Nội dung">
+          <el-input v-model="startForm.content" type="textarea" :rows="4"
+                    placeholder="Nhập tin nhắn gửi tới người dùng..."/>
+        </el-form-item>
+        <el-form-item label="Đính kèm">
+          <div v-if="startFile" class="file-chip">
+            <el-icon :size="18"><Document/></el-icon>
+            <span class="fc-name">{{ startFile.name }}</span>
+            <span class="fc-size">{{ prettyFileSize(startFile.size) }}</span>
+            <el-button text class="fc-remove" @click="startFile=null" title="Bỏ file">
+              <el-icon><Close/></el-icon>
+            </el-button>
+          </div>
+          <el-button v-else plain size="small" @click="startFileInput?.click()">
+            <el-icon><Paperclip/></el-icon><span style="margin-left:6px">Chọn file</span>
+          </el-button>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="startDialog=false">Hủy</el-button>
+        <el-button type="primary" @click="startChat" :loading="starting">GỬI TIN NHẮN</el-button>
+      </template>
+    </el-dialog>
 
     <div class="support-wrap">
       <!-- Danh sách phiên -->
@@ -92,13 +136,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
-import { adminSupportAPI } from '@/api'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { adminSupportAPI, adminAPI } from '@/api'
 import { ElMessage } from 'element-plus'
 import MessageBody from '@/components/common/MessageBody.vue'
 import { setSessions, markRead, isUnread } from '@/stores/supportUnread'
 import dayjs from 'dayjs'
 
+const route      = useRoute()
 const sessions   = ref([])
 const selected   = ref(null)
 const messages   = ref([])
@@ -110,6 +156,15 @@ const uploading  = ref(false)
 let pollTimer = null
 
 const MAX_FILE = 50 * 1024 * 1024   // 50MB
+
+// Admin chủ động mở cuộc trò chuyện
+const startDialog    = ref(false)
+const starting       = ref(false)
+const users          = ref([])
+const loadingUsers   = ref(false)
+const startFile      = ref(null)
+const startFileInput = ref(null)
+const startForm = reactive({ userId: null, subject: '', content: '' })
 
 const pending = computed(() => sessions.value.filter(s => s.status === 'PENDING'))
 const active  = computed(() => sessions.value.filter(s => s.status === 'ACTIVE'))
@@ -145,6 +200,54 @@ async function accept(s) {
 async function reject(s) {
   try { await adminSupportAPI.reject(s.id); ElMessage.info('Đã từ chối yêu cầu'); loadSessions() }
   catch {}
+}
+
+// ── Admin chủ động nhắn tin cho user ─────────────────────
+async function openStartDialog() {
+  Object.assign(startForm, { userId: null, subject: '', content: '' })
+  startFile.value = null
+  startDialog.value = true
+  if (users.value.length) return      // đã tải rồi thì thôi
+  loadingUsers.value = true
+  try { users.value = (await adminAPI.getUsers()).data || [] }
+  catch {} finally { loadingUsers.value = false }
+}
+
+function onStartFile(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  if (!file) return
+  if (file.size > MAX_FILE) { ElMessage.error('File tối đa 50MB'); return }
+  startFile.value = file
+}
+
+function prettyFileSize(b) {
+  if (!b && b !== 0) return ''
+  if (b < 1024) return b + ' B'
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB'
+  return (b / 1024 / 1024).toFixed(1) + ' MB'
+}
+
+async function startChat() {
+  if (!startForm.userId) { ElMessage.warning('Chọn người nhận'); return }
+  if (!startForm.content.trim() && !startFile.value) {
+    ElMessage.warning('Nhập nội dung hoặc đính kèm file'); return
+  }
+  starting.value = true
+  try {
+    const fd = new FormData()
+    fd.append('userId', startForm.userId)
+    fd.append('subject', startForm.subject || '')
+    fd.append('content', startForm.content || '')
+    if (startFile.value) fd.append('file', startFile.value)
+    const res = await adminSupportAPI.start(fd)
+    ElMessage.success('Đã gửi tin nhắn tới người dùng')
+    startDialog.value = false
+    await loadSessions()
+    // Mở luôn phiên vừa tạo để admin chat tiếp
+    const created = sessions.value.find(s => s.id === res.data?.id)
+    if (created) select(created)
+  } catch {} finally { starting.value = false }
 }
 
 async function select(s) {
@@ -215,7 +318,26 @@ function nameInitials(name) { return (name || 'U').split(' ').map(w => w[0]).joi
 function scrollBottom() { nextTick(() => { const el = scrollRef.value; if (el) el.scrollTop = el.scrollHeight }) }
 function fmtTime(d) { return d ? dayjs(d).format('DD/MM HH:mm') : '' }
 
-onMounted(() => { loadSessions(); pollTimer = setInterval(pollTick, 3000) })
+/** Mở phiên chat mà thông báo trỏ đến (?session=<id>). */
+function openSessionFromRoute() {
+  const id = Number(route.query.session)
+  if (!id) return
+  const s = sessions.value.find(x => x.id === id)
+  // Phiên đã đóng hoặc đã bị từ chối thì không còn trong danh sách
+  if (!s) { ElMessage.info('Cuộc trò chuyện này không còn mở'); return }
+  // Yêu cầu chưa được nhận thì chưa có khung chat để mở
+  if (s.status === 'PENDING') { ElMessage.info('Yêu cầu này đang chờ bạn chấp nhận'); return }
+  select(s)
+}
+
+// Bấm thông báo khác khi đang ở sẵn trang này
+watch(() => route.query.session, openSessionFromRoute)
+
+onMounted(async () => {
+  await loadSessions()
+  openSessionFromRoute()
+  pollTimer = setInterval(pollTick, 3000)
+})
 onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 </script>
 
@@ -293,4 +415,14 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
   flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
   gap:12px; color:var(--c-text3);
 }
+
+/* Chip file trong dialog nhắn tin cho user */
+.file-chip {
+  display:flex; align-items:center; gap:8px; padding:6px 10px;
+  background:var(--c-card2); border:1px solid var(--c-border2); border-radius:var(--radius);
+  font-size:0.8rem; color:var(--c-text2); max-width:100%;
+}
+.fc-name   { font-weight:600; color:var(--c-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:220px; }
+.fc-size   { color:var(--c-text3); font-size:0.72rem; }
+.fc-remove { padding:0; min-height:auto; color:var(--c-text3); }
 </style>
