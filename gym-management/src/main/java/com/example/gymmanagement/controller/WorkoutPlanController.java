@@ -92,13 +92,24 @@ public class WorkoutPlanController {
         return ResponseEntity.ok(ApiResponse.success(planService.getAllPlans(ud.getUsername())));
     }
 
+    // ── SỬA: bỏ tham số goal — lịch tập giờ chỉ phụ thuộc số buổi/tuần (mục 8.2 I.docx) ──
     @GetMapping("/suggest-days")
     public ResponseEntity<ApiResponse<Map<String, Object>>> suggestDays(
-            @RequestParam String goal,
             @RequestParam int sessions) {
-        Goal g = Goal.valueOf(goal);
-        List<String> days = planService.suggestDays(g, sessions);
-        return ResponseEntity.ok(ApiResponse.success(Map.of("suggestedDays", days)));
+        List<List<Integer>> options = planService.suggestDays(sessions);
+        return ResponseEntity.ok(ApiResponse.success(Map.of("scheduleOptions", options)));
+    }
+
+    // ── MỚI: xác nhận lịch tập chuẩn khi hệ thống không còn tự xác định được
+    // (mục 8.3 I.docx) — body: { "dayOfWeek": [1,2,4,5] } ──
+    @PostMapping("/{id}/confirm-schedule")
+    public ResponseEntity<ApiResponse<WorkoutPlanResponse>> confirmSchedule(
+            @AuthenticationPrincipal UserDetails ud,
+            @PathVariable Long id,
+            @RequestBody Map<String, List<Integer>> body) {
+        return ResponseEntity.ok(ApiResponse.success(
+                planService.confirmSchedule(ud.getUsername(), id, body.get("dayOfWeek")),
+                "Đã lưu lịch tập chuẩn"));
     }
 
     @GetMapping("/goals")
@@ -108,11 +119,11 @@ public class WorkoutPlanController {
                 Map.of("value","WEIGHT_LOSS", "label","🔥 Giảm cân / Đốt mỡ",  "minDays","4"),
                 Map.of("value","ENDURANCE",   "label","🏃 Tăng sức bền",        "minDays","3"),
                 Map.of("value","FLEXIBILITY", "label","🤸 Tăng linh hoạt",      "minDays","2"),
-                Map.of("value","MAINTENANCE", "label","⚖️ Duy trì thể hình",    "minDays","2")
+                Map.of("value","MAINTENANCE", "label","⚖️ Duy trì thể hình",    "minDays","3")
         )));
     }
 
-    // ── MỚI: Nhập tạ khởi điểm cho 1 bài tập trong giáo án (chỉ 1 lần) ──
+    // ── Nhập tạ khởi điểm cho 1 bài tập trong giáo án (chỉ 1 lần) ──
     @PatchMapping("/plan-exercises/{id}/base-weight")
     public ResponseEntity<ApiResponse<WorkoutPlanExerciseResponse>> setBaseWeight(
             @PathVariable Long id,

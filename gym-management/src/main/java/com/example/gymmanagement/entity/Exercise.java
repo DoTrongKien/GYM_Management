@@ -1,57 +1,57 @@
-package com.example.gymmanagement.entity;
+    package com.example.gymmanagement.entity;
 
-import com.example.gymmanagement.enums.Difficulty;
-import com.example.gymmanagement.enums.MuscleGroup;
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.ColumnDefault;
+    import com.example.gymmanagement.enums.Difficulty;
+    import com.example.gymmanagement.enums.MuscleGroup;
+    import jakarta.persistence.*;
+    import lombok.*;
+    import org.hibernate.annotations.ColumnDefault;
 
-@Entity
-@Table(name = "exercises")
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-public class Exercise {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Entity
+    @Table(name = "exercises")
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+    public class Exercise {
+        @Id
+        @GeneratedValue(strategy = GenerationType.IDENTITY)
+        private Long id;
 
-    private String name;
-    private String description;
-    private String videoUrl;
-    private String imageUrl;
+        private String name;
+        private String description;
+        private String videoUrl;
+        private String imageUrl;
 
-    @Enumerated(EnumType.STRING)
-    private MuscleGroup muscleGroup;
+        @Enumerated(EnumType.STRING)
+        private MuscleGroup muscleGroup;
 
-    @Enumerated(EnumType.STRING)
-    private Difficulty difficulty;
+        @Enumerated(EnumType.STRING)
+        private Difficulty difficulty;
 
-    private Integer caloriesBurned;
-    private Integer defaultSets;
-    private Integer defaultReps;
-    private Integer defaultDurationSeconds;
-    private Integer restSeconds;
+        private Integer caloriesBurned;
+        private Integer defaultSets;
+        private Integer defaultReps;
+        private Integer defaultDurationSeconds;
+        private Integer restSeconds;
 
-    // ── Chỉ số benefit cho từng mục tiêu (0-10) ─────────────────
-    @Builder.Default
-    private Integer muscleGainScore   = 0;
+        // ── Chỉ số benefit cho từng mục tiêu (0-10) ─────────────────
+        @Builder.Default
+        private Integer muscleGainScore   = 0;
 
-    @Builder.Default
-    private Integer weightLossScore   = 0;
+        @Builder.Default
+        private Integer weightLossScore   = 0;
 
-    @Builder.Default
-    private Integer enduranceScore    = 0;
+        @Builder.Default
+        private Integer enduranceScore    = 0;
 
-    @Builder.Default
-    private Integer flexibilityScore  = 0;
+        @Builder.Default
+        private Integer flexibilityScore  = 0;
 
-    @Builder.Default
-    private Integer maintenanceScore  = 0;
+        @Builder.Default
+        private Integer maintenanceScore  = 0;
 
-    // ── MỚI: Thể lực (mana) tiêu hao khi tập bài này với completionPercent=100 ──
-    @ColumnDefault("10")
-    @Builder.Default
-    private Integer staminaCost = 10;
+        // ── MỚI: Thể lực (mana) tiêu hao khi tập bài này với completionPercent=100 ──
+        @ColumnDefault("10")
+        @Builder.Default
+        private Integer staminaCost = 10;
 
-    @Builder.Default
-    private Boolean isActive = true;
-}
+        @Builder.Default
+        private Boolean isActive = true;
+    }
