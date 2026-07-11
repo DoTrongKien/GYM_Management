@@ -6,7 +6,6 @@ import lombok.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 
 @Data @NoArgsConstructor @AllArgsConstructor @Builder
 public class WorkoutPlanResponse {
@@ -36,8 +35,9 @@ public class WorkoutPlanResponse {
 
     private List<WorkoutPlanDayResponse> planDays;
 
-    // Gợi ý ngày tập tối ưu (theo mục tiêu)
-    private List<String>             suggestedDays;
+    // ── SỬA: giờ trả về TẤT CẢ lịch tập khuyến nghị (mỗi phần tử là 1 danh sách ISO
+    // dayOfWeek), không còn 1 lịch cố định theo tên ngày tiếng Anh như trước ──
+    private List<List<Integer>>      suggestedDays;
     private String                   scheduleNote;
 
     private String weightAdjustmentNote;

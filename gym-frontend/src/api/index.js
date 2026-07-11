@@ -54,10 +54,15 @@ export const planAPI = {
     getAll:       ()     => api.get('/workout-plans'),
     createCustom: (data) => api.post('/workout-plans', data),
     adjustWeek:   (id, data) => api.post(`/workout-plans/${id}/adjust-week`, data),
-    // === MỚI: User xem & chọn giáo án mẫu do admin tạo ===
+    // === User xem & chọn giáo án mẫu do admin tạo ===
     getTemplates:    ()    => api.get('/workout-plans/templates'),
     selectTemplate:  (id)  => api.post(`/workout-plans/templates/${id}/select`),
-    setBaseWeight: (planExerciseId, payload) => api.patch(`/workout-plans/plan-exercises/${planExerciseId}/base-weight`, payload)
+    setBaseWeight: (planExerciseId, payload) => api.patch(`/workout-plans/plan-exercises/${planExerciseId}/base-weight`, payload),
+    // ── MỚI: lịch tập giờ chỉ phụ thuộc số buổi/tuần (mục 8.2), không còn theo goal ──
+    // Trả về { scheduleOptions: number[][] } — mỗi phần tử là 1 lịch khả dĩ, dạng ISO dayOfWeek (1=Thứ Hai...7=Chủ Nhật)
+    suggestDays: (sessions) => api.get('/workout-plans/suggest-days', { params: { sessions } }),
+    // ── MỚI: xác nhận lịch tập chuẩn khi hệ thống không còn tự xác định được (mục 8.3) ──
+    confirmSchedule: (id, dayOfWeek) => api.post(`/workout-plans/${id}/confirm-schedule`, { dayOfWeek })
 }
 
 // ── Sessions ──────────────────────────────────
@@ -65,9 +70,13 @@ export const sessionAPI = {
     getAll:       ()           => api.get('/sessions'),
     getWeek:      ()           => api.get('/sessions/this-week'),
     getById:      (id)         => api.get(`/sessions/${id}`),
-    checkIn:    (id)         => api.post(`/sessions/${id}/check-in`),
+    // ── check-in nhận thêm confirmReducedIntensity, gửi qua query param
+    // (khớp @RequestParam(defaultValue="false") boolean confirmReducedIntensity bên backend).
+    // Lưu ý: tên tham số giữ nguyên "confirmReducedIntensity" để khớp API, nhưng theo
+    // thiết kế mana mới, xác nhận này KHÔNG còn làm giảm rep — chỉ là "vẫn tiếp tục tập". ──
+    checkIn:    (id, confirmReducedIntensity = false) =>
+        api.post(`/sessions/${id}/check-in`, null, { params: { confirmReducedIntensity } }),
     enroll:       (data)       => api.post('/sessions/enroll', data),
-    schedule:   (data)       => api.post('/sessions/schedule', data),
     complete:     (id, data)   => api.post(`/sessions/${id}/check-out`, data),
     skip:         (id, notes)  => api.post(`/sessions/${id}/skip`, { notes }),
     delete:       (id)         => api.delete(`/sessions/${id}`),

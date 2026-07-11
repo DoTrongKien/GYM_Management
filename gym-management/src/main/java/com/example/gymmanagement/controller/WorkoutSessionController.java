@@ -53,11 +53,23 @@ public class WorkoutSessionController {
         return ResponseEntity.ok(ApiResponse.success(sessionService.getSessionById(ud.getUsername(), id)));
     }
 
+    // ── SỬA: check-in giờ trả về CheckInResult ──
+    // - requiresConfirmation=true  -> FE hiện popup cảnh báo chấn thương (warningMessage),
+    //                                   CHƯA thật sự check-in.
+    // - requiresConfirmation=false -> đã check-in thật, session chứa dữ liệu (có thể đã
+    //                                   giảm rep nếu người dùng xác nhận tập lúc thiếu mana).
+    // FE gọi lại đúng endpoint này với confirmReducedIntensity=true khi người dùng chọn
+    // "vẫn muốn tập" ở popup.
     @PostMapping("/{id}/check-in")
-    public ResponseEntity<ApiResponse<WorkoutSessionResponse>> checkIn(
-            @AuthenticationPrincipal UserDetails ud, @PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.success(
-                sessionService.checkIn(ud.getUsername(), id), "Check-in thành công! 💪"));
+    public ResponseEntity<ApiResponse<CheckInResult>> checkIn(
+            @AuthenticationPrincipal UserDetails ud,
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "false") boolean confirmReducedIntensity) {
+        CheckInResult result = sessionService.checkIn(ud.getUsername(), id, confirmReducedIntensity);
+        String message = result.isRequiresConfirmation()
+                ? "⚠️ Cần xác nhận trước khi check-in"
+                : "Check-in thành công! 💪";
+        return ResponseEntity.ok(ApiResponse.success(result, message));
     }
 
     // Check-out bắt buộc nhập tỉ lệ hoàn thành + tiến độ (cuối tuần)

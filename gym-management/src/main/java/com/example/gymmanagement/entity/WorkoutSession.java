@@ -55,6 +55,10 @@ public class WorkoutSession {
     @Builder.Default
     private Boolean isCustom = false;
 
+    // ── ĐÃ XOÁ: lowIntensityApplied / lowIntensityFactor ──
+    // Theo thiết kế mới: Mana chỉ đại diện cho khả năng hồi phục (Recovery), KHÔNG còn
+    // được dùng để giảm Set/Rep runtime của buổi tập. Xem WorkoutSessionService.checkIn().
+
     @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<SessionExerciseLog> exerciseLogs;
 

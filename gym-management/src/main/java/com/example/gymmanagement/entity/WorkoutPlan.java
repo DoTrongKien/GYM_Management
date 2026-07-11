@@ -68,10 +68,22 @@ public class WorkoutPlan {
 
     private String weightAdjustmentNote;
 
-    // ── MỚI: Hệ thống Mana (thể lực) ─────────────────────────
+    // ── Hệ thống Mana (thể lực) ─────────────────────────
     private Integer maxMana;           // = FS * 2, tính khi tạo/rebuild giáo án AI
     private Integer currentMana;       // giá trị runtime, trừ dần mỗi checkout
     private LocalDate lastTrainingDate; // ngày checkout gần nhất, dùng để tính hồi phục
+
+    // ── Chặn applyRegen() cộng mana nhiều lần trong cùng 1 ngày ──
+    private LocalDate lastManaRegenDate;
+
+    // ── MỚI: Lịch tập đã được CHỐT cho giáo án AI (mục 8.3 I.docx) ──
+    // Dạng "1,3,5" (ISO dayOfWeek, phân tách bởi dấu phẩy).
+    // CHỈ được ghi khi người dùng CHỦ ĐỘNG chọn lại lịch qua API confirm-schedule,
+    // sau khi hệ thống không còn xác định được lịch chuẩn nào phù hợp (survivors == 0).
+    // Nếu hệ thống tự xác định được lịch (survivors == 1) thì KHÔNG lưu xuống DB —
+    // mỗi lần cần chỉ suy luận lại từ lịch sử check-in (xem WorkoutSessionService).
+    // Khi tạo giáo án mới, field này luôn null (builder không set default -> mặc định null).
+    private String confirmedScheduleDows;
 
     private LocalDateTime createdAt;
 
