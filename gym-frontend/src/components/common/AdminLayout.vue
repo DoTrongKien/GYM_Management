@@ -11,11 +11,12 @@
         <el-menu-item index="/admin/dashboard"><el-icon><DataAnalysis/></el-icon><template #title>Dashboard</template></el-menu-item>
         <el-menu-item index="/admin/users"><el-icon><UserFilled/></el-icon><template #title>Người dùng</template></el-menu-item>
         <el-menu-item index="/admin/memberships"><el-icon><CreditCard/></el-icon><template #title>Hóa đơn</template></el-menu-item>
+        <el-menu-item index="/admin/invoices"><el-icon><Tickets/></el-icon><template #title>Lịch sử giao dịch</template></el-menu-item>
         <el-menu-item index="/admin/exercises"><el-icon><Trophy/></el-icon><template #title>Bài tập</template></el-menu-item>
         <el-menu-item index="/admin/plans"><el-icon><Calendar/></el-icon><template #title>Giáo án</template></el-menu-item>
         <el-menu-item index="/admin/ratings"><el-icon><Star/></el-icon><template #title>Đánh giá</template></el-menu-item>
         <el-menu-item index="/admin/support">
-          <el-badge :value="pendingCount" :max="9" :hidden="!pendingCount" class="menu-badge">
+          <el-badge :value="supportBadge" :max="9" :hidden="!supportBadge" class="menu-badge">
             <el-icon><ChatDotRound/></el-icon>
           </el-badge>
           <template #title>Hỗ trợ chat</template>
@@ -45,7 +46,8 @@
         </el-button>
         <div class="topbar-title display">ADMIN PANEL</div>
         <div style="flex:1"/>
-        <el-tag type="warning" size="small" style="font-family:var(--font-mono);font-size:0.7rem">ADMIN</el-tag>
+        <NotificationBell/>
+        <el-tag type="warning" size="small" style="font-family:var(--font-mono);font-size:0.7rem;margin-left:12px">ADMIN</el-tag>
       </header>
       <main class="page-content">
         <router-view v-slot="{ Component }">
@@ -59,11 +61,13 @@
 </template>
 
 <script setup>
-import { ref, h, onMounted, onUnmounted } from 'vue'
+import { ref, computed, h, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { adminSupportAPI } from '@/api'
 import { ElNotification, ElButton, ElMessage } from 'element-plus'
+import { setOtherRole, setSessions, unreadCount } from '@/stores/supportUnread'
+import NotificationBell from './NotificationBell.vue'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -74,13 +78,20 @@ const collapsed = ref(false)
 const pendingCount = ref(0)
 const seenPending = new Set()      // id các yêu cầu đã hiển thị thông báo
 const notifs = new Map()           // id -> instance thông báo đang mở
+const lastMsgSeen = new Map()      // id -> lastMessageAt đã thấy (phát hiện tin nhắn mới từ user)
 let firstLoad = true
 let supportTimer = null
+
+setOtherRole('USER')               // phía bên kia của admin là user
+
+// Badge trên menu: yêu cầu đang chờ + cuộc hội thoại có tin nhắn chưa đọc
+const supportBadge = computed(() => pendingCount.value + unreadCount.value)
 
 async function pollSupport() {
   try {
     const res = await adminSupportAPI.sessions()
     const list = res.data || []
+    setSessions(list)              // cập nhật badge chưa đọc
     const pend = list.filter(s => s.status === 'PENDING')
     pendingCount.value = pend.length
     const pendIds = new Set(pend.map(s => s.id))
@@ -96,8 +107,61 @@ async function pollSupport() {
     seenPending.forEach(id => { if (!pendIds.has(id)) seenPending.delete(id) })
     notifs.forEach((inst, id) => { if (!pendIds.has(id)) { inst.close(); notifs.delete(id) } })
 
+    // Tin nhắn mới từ user trong các phiên đang chat → thông báo
+    const openIds = new Set(list.map(s => s.id))
+    list.filter(s => s.status === 'ACTIVE').forEach(s => {
+      const prevAt = lastMsgSeen.get(s.id)
+      if (s.lastMessageAt) {
+        if (!firstLoad && s.lastMessageRole === 'USER' && prevAt
+            && new Date(s.lastMessageAt).getTime() > new Date(prevAt).getTime()) {
+          notifyNewMessage(s)
+        }
+        lastMsgSeen.set(s.id, s.lastMessageAt)
+      }
+    })
+    lastMsgSeen.forEach((_, id) => { if (!openIds.has(id)) lastMsgSeen.delete(id) })
+
     firstLoad = false
   } catch {}
+}
+
+// Tách nội dung thành đoạn chữ + link bấm được (cho popup thông báo)
+const URL_RE = /(https?:\/\/[^\s<]+)/g
+function contentVNodes(text) {
+  const out = []
+  let last = 0, m
+  URL_RE.lastIndex = 0
+  while ((m = URL_RE.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index))
+    out.push(h('a', {
+      href: m[0], target: '_blank', rel: 'noopener noreferrer',
+      style: 'color:var(--el-color-primary); text-decoration:underline; word-break:break-all'
+    }, m[0]))
+    last = m.index + m[0].length
+  }
+  if (last < text.length) out.push(text.slice(last))
+  return out
+}
+
+// Thông báo khi user gửi tin nhắn mới trong một phiên đang chat
+function notifyNewMessage(s) {
+  const inst = ElNotification({
+    title: '💬 Tin nhắn mới',
+    type: 'info',
+    duration: 6000,
+    customClass: 'support-notify',
+    message: h('div', {}, [
+      h('div', { style: 'margin-bottom:8px; line-height:1.5' }, [
+        h('b', {}, s.userName || s.userEmail || 'Người dùng'),
+        ': ',
+        ...contentVNodes(s.lastMessage || 'Đã gửi một tin nhắn')
+      ]),
+      h(ElButton, {
+        type: 'primary', size: 'small',
+        onClick: () => { router.push('/admin/support'); inst.close() }
+      }, () => 'Mở hội thoại')
+    ])
+  })
 }
 
 function notifyNewRequest(s) {
@@ -113,6 +177,14 @@ function notifyNewRequest(s) {
         ' cần hỗ trợ về: ',
         h('i', {}, `“${s.subject || 'Hỗ trợ'}”`)
       ]),
+      // Nội dung user trình bày (nếu có)
+      s.lastMessage
+        ? h('div', {
+            style: 'margin-bottom:10px; padding:6px 10px; background:rgba(0,0,0,0.05); border-radius:6px; '
+              + 'font-size:0.85rem; color:var(--el-text-color-regular); white-space:pre-wrap; '
+              + 'word-break:break-word; max-height:120px; overflow:auto'
+          }, contentVNodes(s.lastMessage))
+        : null,
       h('div', { style: 'display:flex; gap:8px' }, [
         h(ElButton, {
           type: 'success', size: 'small',

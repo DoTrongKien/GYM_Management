@@ -104,6 +104,13 @@ const router = createRouter({
                 },
 
                 {
+                    path: 'payment/:invoiceId',
+                    name: 'UserPaymentQR',
+                    component: () =>
+                        import('@/views/user/PaymentQR.vue')
+                },
+
+                {
                     path: 'exercises',
                     name: 'Exercises',
                     component: () =>
@@ -165,6 +172,12 @@ const router = createRouter({
                     name: 'AdminMemberships',
                     component: () =>
                         import('@/views/admin/MembershipsView.vue')
+                },
+                {
+                    path: 'invoices',
+                    name: 'AdminInvoices',
+                    component: () =>
+                        import('@/views/admin/InvoiceHistoryView.vue')
                 },
 
                 {

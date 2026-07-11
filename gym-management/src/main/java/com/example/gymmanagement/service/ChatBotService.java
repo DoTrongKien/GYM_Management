@@ -39,16 +39,12 @@ public class ChatBotService {
 
     // Giá & thời hạn gói tập (đồng bộ với MembershipService)
     private static final Map<MembershipType, Double> PRICES = Map.of(
-            MembershipType.BASIC, 299000.0,
-            MembershipType.STANDARD, 499000.0,
-            MembershipType.PREMIUM, 799000.0,
-            MembershipType.VIP, 1299000.0
+            MembershipType.FREE, 0.0,
+            MembershipType.VIP, 299000.0
     );
     private static final Map<MembershipType, Integer> DURATIONS_MONTHS = Map.of(
-            MembershipType.BASIC, 1,
-            MembershipType.STANDARD, 3,
-            MembershipType.PREMIUM, 6,
-            MembershipType.VIP, 12
+            MembershipType.FREE, 1200, // gói free không giới hạn thời gian (100 năm)
+            MembershipType.VIP, 1
     );
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
@@ -270,7 +266,7 @@ public class ChatBotService {
         for (MembershipType type : MembershipType.values()) {
             sb.append("• ").append(type.name())
                     .append(" — ").append(vnd(PRICES.get(type)))
-                    .append(" / ").append(DURATIONS_MONTHS.get(type)).append(" tháng\n");
+                    .append(" / ").append(durationText(type)).append("\n");
         }
         sb.append("Bạn muốn đăng ký gói nào? Vào mục \"Gói tập\" để thanh toán qua Momo nhé!");
         return new Answer(sb.toString(),
@@ -436,6 +432,12 @@ public class ChatBotService {
 
     private String vnd(double amount) {
         return String.format(Locale.US, "%,d", (long) amount).replace(',', '.') + "đ";
+    }
+
+    // Gói FREE dùng thời hạn 1200 tháng làm mốc "không giới hạn", không hiển thị con số đó
+    private String durationText(MembershipType type) {
+        return type == MembershipType.FREE ? "không giới hạn"
+                : DURATIONS_MONTHS.get(type) + " tháng";
     }
 
     private String fmt(LocalDate d) {

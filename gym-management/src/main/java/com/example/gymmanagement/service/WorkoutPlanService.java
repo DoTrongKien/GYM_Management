@@ -13,6 +13,7 @@ import com.example.gymmanagement.service.schedule.ScheduleCatalog;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -28,6 +29,29 @@ public class WorkoutPlanService {
     private final WorkoutSessionRepository  sessionRepo;
     private final FitnessCalculator fitnessCalculator;
     private final WorkoutPlanExerciseRepository planExerciseRepo;
+    private final MembershipRepository membershipRepo;
+
+    // Gói Free chỉ được tạo/đổi giáo án 1 lần/tháng. VIP không giới hạn.
+    private static final int FREE_PLAN_LIMIT_PER_MONTH = 1;
+
+    /** Chặn tạo/đổi giáo án nếu user gói Free đã dùng hết lượt trong tháng. VIP luôn được bỏ qua. */
+    private void checkPlanGenerationLimit(User user) {
+        boolean isVip = membershipRepo.findByUserIdAndIsActiveTrue(user.getId())
+                .map(m -> m.getMembershipType() == MembershipType.VIP)
+                .orElse(false);
+        if (isVip) return;
+
+        LocalDate monthStart = LocalDate.now().withDayOfMonth(1);
+        long countThisMonth = planRepo.findByUserIdOrderByCreatedAtDesc(user.getId()).stream()
+                .filter(p -> !Boolean.TRUE.equals(p.getIsTemplate()))
+                .filter(p -> p.getCreatedAt() != null && !p.getCreatedAt().toLocalDate().isBefore(monthStart))
+                .count();
+
+        if (countThisMonth >= FREE_PLAN_LIMIT_PER_MONTH) {
+            throw new RuntimeException("Gói Free chỉ được tạo/đổi giáo án " + FREE_PLAN_LIMIT_PER_MONTH +
+                    " lần/tháng. Nâng cấp lên gói VIP để tạo giáo án không giới hạn.");
+        }
+    }
 
     // ─────────────────────────────────────────────────────────
     // 1. generateAIPlanWithGoal — FS + BodyType + Level + Goal + Mana
@@ -36,6 +60,7 @@ public class WorkoutPlanService {
     public WorkoutPlanResponse generateAIPlanWithGoal(String email, Goal goal,
                                                       FitnessLevel levelParam, Integer daysPerWeek) {
         User user = getUser(email);
+        checkPlanGenerationLimit(user);
         UserProfile profile = profileRepo.findByUserId(user.getId()).orElse(null);
 
         FitnessLevel level = levelParam != null ? levelParam
@@ -289,6 +314,7 @@ public class WorkoutPlanService {
     @Transactional
     public WorkoutPlanResponse selectTemplate(String email, Long templateId) {
         User user = getUser(email);
+        checkPlanGenerationLimit(user);
         WorkoutPlan template = planRepo.findById(templateId)
                 .orElseThrow(() -> new RuntimeException("Template not found"));
         if (!Boolean.TRUE.equals(template.getIsTemplate())) {

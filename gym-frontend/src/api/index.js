@@ -103,6 +103,13 @@ export const membershipAPI = {
     purchase:       (data) => api.post('/memberships', data),
     confirmPayment: (id, txId) => api.post(`/memberships/${id}/confirm-payment`, { transactionId: txId })
 }
+export const invoiceAPI = {
+    create:        (membershipType) => api.post('/invoices', { membershipType }),
+    getAll:        ()   => api.get('/invoices'),
+    getOne:        (id) => api.get(`/invoices/${id}`),
+    regenerateQr:  (id) => api.post(`/invoices/${id}/regenerate-qr`),
+    cancel:        (id) => api.post(`/invoices/${id}/cancel`)
+}
 
 // ── Nutrition ─────────────────────────────────
 export const nutritionAPI = {
@@ -122,13 +129,19 @@ export const exerciseAPI = {
 
 // ── Ratings ───────────────────────────────────
 export const ratingAPI = {
-    add:          (data)         => api.post('/ratings', data),
+    // formData: rating, comment, serviceType, isPublic, file (tùy chọn)
+    add:          (formData)     => api.post('/ratings', formData, { timeout: 120000 }),
+    // formData: như trên + removeAttachment
+    update:       (id, formData) => api.put(`/ratings/${id}`, formData, { timeout: 120000 }),
+    remove:       (id)           => api.delete(`/ratings/${id}`),
     getPublic:    ()             => api.get('/ratings/public'),
     getMy:        ()             => api.get('/ratings/my'),
     getAverages:  ()             => api.get('/ratings/averages'),
     // Admin
     getAll:       ()             => api.get('/ratings/admin/all'),
-    adminReply:   (id, reply)    => api.post(`/ratings/admin/${id}/reply`, { reply })
+    // formData: reply, file (tùy chọn), removeAttachment
+    adminReply:   (id, formData) => api.post(`/ratings/admin/${id}/reply`, formData, { timeout: 120000 }),
+    adminRemove:  (id)           => api.delete(`/ratings/admin/${id}`)
 }
 
 // ── Chat với bot ──────────────────────────────
@@ -142,7 +155,7 @@ export const chatAPI = {
 
 // ── Chat với admin (User) ─────────────────────
 export const supportAPI = {
-    request:   (subject)     => api.post('/support/request', { subject }),
+    request:   (formData)    => api.post('/support/request', formData, { timeout: 120000 }),
     sessions:  ()            => api.get('/support/sessions'),
     messages:  (id)          => api.get(`/support/sessions/${id}/messages`),
     send:      (id, content) => api.post(`/support/sessions/${id}/messages`, { content }),
@@ -153,6 +166,8 @@ export const supportAPI = {
 // ── Chat với user (Admin) ─────────────────────
 export const adminSupportAPI = {
     sessions: ()             => api.get('/admin/support/sessions'),
+    // formData: userId, subject, content, file (tùy chọn)
+    start:    (formData)     => api.post('/admin/support/start', formData, { timeout: 120000 }),
     accept:   (id)           => api.post(`/admin/support/${id}/accept`),
     reject:   (id)           => api.post(`/admin/support/${id}/reject`),
     close:    (id)           => api.post(`/admin/support/${id}/close`),
@@ -187,6 +202,8 @@ export const adminAPI = {
     confirmPayment:     (id)         => api.post(`/admin/memberships/${id}/confirm-payment`),
     refund:             (id)         => api.put(`/admin/memberships/${id}/refund`),
     getUserMemberships: (uid)        => api.get(`/admin/memberships/user/${uid}`),
+    getInvoices:        ()     => api.get('/admin/invoices'),
+    getUserInvoices:    (uid)  => api.get(`/admin/invoices/user/${uid}`),
     getRevenue:         ()           => api.get('/admin/stats/revenue'),
     getPlans:           ()           => api.get('/admin/workout-plans'),
     getUserPlans:       (uid)        => api.get(`/admin/workout-plans/user/${uid}`),
