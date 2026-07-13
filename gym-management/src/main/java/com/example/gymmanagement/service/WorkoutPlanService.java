@@ -619,6 +619,27 @@ public class WorkoutPlanService {
                 : null;
         String note = buildScheduleNote(plan.getGoal(), plan.getSessionsPerWeek());
 
+        // ── MỚI: Thể lực / Thể trạng — tính ĐỘNG từ UserProfile hiện tại mỗi lần build
+        // response, KHÔNG lưu DB, KHÔNG lưu trong entity WorkoutPlan. Dùng lại đúng
+        // FitnessCalculator đã có sẵn, cùng công thức với lúc tạo giáo án AI, nhưng
+        // luôn phản ánh chỉ số MỚI NHẤT của người dùng (không phải giá trị lúc tạo plan).
+        Integer fitnessScore = null;
+        String fitnessLevelStr = null;
+        String bodyTypeStr = null;
+        if (profile != null && profile.getAge() != null
+                && profile.getHeight() != null && profile.getWeight() != null) {
+            double fs = fitnessCalculator.calculateFS(
+                    profile.getAge(), profile.getHeight(), profile.getWeight(), profile.getGender());
+            FitnessCalculator.FsLevel fsLevel = fitnessCalculator.getFsLevel(fs);
+            FitnessCalculator.BodyType bodyType = fitnessCalculator.classifyBodyType(
+                    profile.getHeight(), profile.getWeight(), profile.getBmi(),
+                    profile.getGender(), profile.getBodyFatPercentage());
+
+            fitnessScore = (int) Math.round(fs);
+            fitnessLevelStr = fsLevel.name();
+            bodyTypeStr = bodyType.name();
+        }
+
         return WorkoutPlanResponse.builder()
                 .id(plan.getId())
                 .planName(plan.getPlanName())
@@ -649,6 +670,10 @@ public class WorkoutPlanService {
                 .manaMessage(plan.getMaxMana() != null
                         ? ManaMessageHelper.buildMessage(plan.getMaxMana(), plan.getMaxMana())
                         : null)
+                // ── Thể lực / Thể trạng (tính động, không lưu DB) ──
+                .fitnessScore(fitnessScore)
+                .fitnessLevel(fitnessLevelStr)
+                .bodyType(bodyTypeStr)
                 .build();
     }
 
@@ -718,7 +743,7 @@ public class WorkoutPlanService {
         };
         String bmiNote = (profile != null && profile.getBmi() != null)
                 ? " (BMI hiện tại: " + profile.getBmi() + ")" : "";
-        return String.format("Giáo án AI 6 tuần cho mục tiêu %s%s. %d buổi/tuần. Cường độ điều chỉnh tự động theo tiến độ hàng tuần.",
+        return String.format("Giáo án 6 tuần cho mục tiêu %s%s. %d buổi/tuần.",
                 gv, bmiNote, days);
     }
 

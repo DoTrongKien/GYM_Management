@@ -33,8 +33,16 @@
               <el-tag type="danger">Tuần {{ plan.currentWeek }} / {{ plan.durationWeeks }}</el-tag>
               <el-tag>{{ plan.sessionsPerWeek }} buổi/tuần</el-tag>
               <el-tag v-if="plan.isAiGenerated" type="success">✨ Giáo án cá nhân hóa </el-tag>
-              <el-tag v-else-if="!plan.isAiGenerated" type="warning" effect="plain">📋 Giáo án mẫu</el-tag>
-            </div>
+                            <el-tag v-else-if="!plan.isAiGenerated" type="warning" effect="plain">📋 Giáo án mẫu</el-tag>
+                            <!-- MỚI: Thể lực (Fitness Score) - chỉ hiện khi backend đã trả plan.fitnessScore -->
+                            <el-tag v-if="plan.fitnessScore != null" type="success" effect="plain">
+                              💪 Thể lực: {{ fitnessScoreText(plan) }}
+                            </el-tag>
+                            <!-- MỚI: Thể trạng (Body Type) - chỉ hiện khi backend đã trả plan.bodyType -->
+                            <el-tag v-if="plan.bodyType" effect="plain">
+                              🧍 Thể trạng: {{ bodyTypeLabel(plan.bodyType) }}
+                            </el-tag>
+                          </div>
 
           </div>
           <el-button type="primary" plain size="small" @click="openGoalDialog">
@@ -833,6 +841,35 @@ function levelLabel(l) {
     INTERMEDIATE: 'Progress (Trung bình)',
     ADVANCED: 'Elite (Nâng cao)'
   }[l] || l
+}
+
+// MỚI: Badge Thể lực — nếu backend đã trả fitnessLevel thì hiện kèm tên mức,
+// nếu chỉ có điểm (fitnessScore) thì hiện dạng "82/100"
+function fitnessLevelLabel(level) {
+  return {
+    EXCELLENT: 'Xuất sắc',
+    GOOD: 'Tốt',
+    AVERAGE: 'Trung bình',
+    WEAK: 'Yếu'
+  }[level] || null
+}
+
+function fitnessScoreText(p) {
+  const score = Math.round(p.fitnessScore)
+  const levelLabel = fitnessLevelLabel(p.fitnessLevel)
+  return levelLabel ? `${levelLabel} (${score}/100)` : `${score}/100`
+}
+
+// MỚI: Badge Thể trạng — map bodyType (enum FitnessCalculator.BodyType bên backend)
+function bodyTypeLabel(bt) {
+  return {
+    CAO_GAY: 'Cao gầy',
+    GAY_CAN_DOI: 'Hơi gầy',
+    CAN_DOI: 'Bình thường',
+    CO_BAP: 'Cơ bắp',
+    VAN_DONG_VIEN: 'Vận động viên',
+    THUA_CAN: 'Thừa cân'
+  }[bt] || bt
 }
 
 function muscleLabel(m) {

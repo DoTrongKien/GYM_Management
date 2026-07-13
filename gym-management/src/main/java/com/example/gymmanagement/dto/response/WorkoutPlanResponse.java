@@ -35,8 +35,6 @@ public class WorkoutPlanResponse {
 
     private List<WorkoutPlanDayResponse> planDays;
 
-    // ── SỬA: giờ trả về TẤT CẢ lịch tập khuyến nghị (mỗi phần tử là 1 danh sách ISO
-    // dayOfWeek), không còn 1 lịch cố định theo tên ngày tiếng Anh như trước ──
     private List<List<Integer>>      suggestedDays;
     private String                   scheduleNote;
 
@@ -49,4 +47,13 @@ public class WorkoutPlanResponse {
     private Integer maxMana;
     private Integer currentMana;
     private String manaMessage;
+
+    // ── MỚI: Thể lực / Thể trạng — tính ĐỘNG mỗi lần trả API từ UserProfile hiện tại
+    // qua FitnessCalculator, KHÔNG lưu DB, KHÔNG lưu trong entity WorkoutPlan.
+    // fitnessLevel: "EXCELLENT" | "GOOD" | "AVERAGE" | "WEAK" (FitnessCalculator.FsLevel)
+    // bodyType: "CAO_GAY" | "GAY_CAN_DOI" | "CAN_DOI" | "CO_BAP" | "VAN_DONG_VIEN" | "THUA_CAN"
+    // Có thể null nếu không xác định được (ví dụ template không gắn UserProfile).
+    private Integer fitnessScore;
+    private String  fitnessLevel;
+    private String  bodyType;
 }
