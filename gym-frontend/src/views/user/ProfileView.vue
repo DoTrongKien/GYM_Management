@@ -19,8 +19,15 @@
             </el-form-item>
           </div>
           <div class="grid-2">
-            <el-form-item label="Tuổi">
-              <el-input-number v-model="form.age" :min="10" :max="100" style="width:100%"/>
+            <el-form-item label="Ngày sinh">
+              <el-date-picker
+                v-model="form.dateOfBirth"
+                type="date"
+                placeholder="Chọn ngày sinh"
+                format="DD/MM/YYYY"
+                value-format="YYYY-MM-DD"
+                style="width:100%"
+              />
             </el-form-item>
             <el-form-item label="Giới tính">
               <el-select v-model="form.gender" style="width:100%">
@@ -50,14 +57,8 @@
             <el-form-item label="Số ngày rảnh / tuần">
               <el-input-number v-model="form.availableDaysPerWeek" :min="1" :max="7" style="width:100%"/>
             </el-form-item>
-            <el-form-item label="Thời gian / buổi (phút)">
-              <el-input-number v-model="form.preferredSessionDuration" :min="20" :max="180" :step="5" style="width:100%"/>
-            </el-form-item>
           </div>
-          <el-form-item label="Bệnh lý / Chấn thương cần lưu ý">
-            <el-input v-model="form.medicalConditions" type="textarea" :rows="2"
-                      placeholder="VD: đau lưng mãn tính, chấn thương gối, huyết áp cao..."/>
-          </el-form-item>
+
         </el-form>
       </el-card>
 
@@ -118,10 +119,17 @@ import { ElMessage } from 'element-plus'
 
 const profile = ref(null)
 const saving  = ref(false)
+
 const form    = reactive({
-  height:170, weight:65, age:25, gender:'male',
-  goal:'WEIGHT_LOSS', fitnessLevel:'BEGINNER',
-  availableDaysPerWeek:3, preferredSessionDuration:60, medicalConditions:''
+  height: 170,
+  weight: 65,
+  dateOfBirth: '',
+  gender: 'male',
+  goal: 'WEIGHT_LOSS',
+  fitnessLevel: 'BEGINNER',
+  availableDaysPerWeek: 3,
+  preferredSessionDuration: 60,
+  medicalConditions: ''
 })
 
 const bmiColor = computed(() => {
@@ -159,15 +167,21 @@ async function load() {
   try {
     const r = await profileAPI.get()
     profile.value = r.data
+    // Cập nhật mapping dữ liệu
     Object.assign(form, {
-      height: r.data.height, weight: r.data.weight, age: r.data.age,
-      gender: r.data.gender, goal: r.data.goal, fitnessLevel: r.data.fitnessLevel,
+      height: r.data.height,
+      weight: r.data.weight,
+      dateOfBirth: r.data.dateOfBirth, // Lấy dateOfBirth từ response
+      gender: r.data.gender,
+      goal: r.data.goal,
+      fitnessLevel: r.data.fitnessLevel,
       availableDaysPerWeek: r.data.availableDaysPerWeek,
       preferredSessionDuration: r.data.preferredSessionDuration,
       medicalConditions: r.data.medicalConditions || ''
     })
   } catch {}
 }
+
 
 async function save() {
   saving.value = true

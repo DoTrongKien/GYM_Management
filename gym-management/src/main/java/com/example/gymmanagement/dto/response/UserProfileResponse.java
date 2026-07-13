@@ -2,6 +2,9 @@ package com.example.gymmanagement.dto.response;
 import com.example.gymmanagement.enums.FitnessLevel;
 import com.example.gymmanagement.enums.Goal;
 import lombok.*;
+
+import java.time.LocalDate;
+
 @Data @NoArgsConstructor @AllArgsConstructor @Builder
 public class UserProfileResponse {
     private Long id;
@@ -11,7 +14,7 @@ public class UserProfileResponse {
     private String phone;
     private Double height;
     private Double weight;
-    private Integer age;
+    private LocalDate dateOfBirth;
     private String gender;
     private Double bmi;
     private String bmiCategory;

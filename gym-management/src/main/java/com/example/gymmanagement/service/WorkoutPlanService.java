@@ -60,7 +60,6 @@ public class WorkoutPlanService {
     public WorkoutPlanResponse generateAIPlanWithGoal(String email, Goal goal,
                                                       FitnessLevel levelParam, Integer daysPerWeek) {
         User user = getUser(email);
-        checkPlanGenerationLimit(user);
         UserProfile profile = profileRepo.findByUserId(user.getId()).orElse(null);
 
         FitnessLevel level = levelParam != null ? levelParam
@@ -101,6 +100,12 @@ public class WorkoutPlanService {
                 .maxMana(maxMana)
                 .currentMana(maxMana)
                 // confirmedScheduleDows: KHÔNG set -> mặc định null (giáo án mới luôn chưa chốt lịch)
+                // ── MỚI: Snapshot Thể lực/Thể trạng tại thời điểm tạo giáo án — tính ĐÚNG 1 LẦN
+                // ở đây, dùng chính fs/fsLevel/bodyType vừa tính ở trên (không tính lại lần nữa,
+                // không gọi thêm FitnessCalculator) ──
+                .fitnessScore((int) Math.round(fs))
+                .fitnessLevel(fsLevel)
+                .bodyType(bodyType)
                 .build();
         planRepo.save(plan);
 
@@ -619,27 +624,6 @@ public class WorkoutPlanService {
                 : null;
         String note = buildScheduleNote(plan.getGoal(), plan.getSessionsPerWeek());
 
-        // ── MỚI: Thể lực / Thể trạng — tính ĐỘNG từ UserProfile hiện tại mỗi lần build
-        // response, KHÔNG lưu DB, KHÔNG lưu trong entity WorkoutPlan. Dùng lại đúng
-        // FitnessCalculator đã có sẵn, cùng công thức với lúc tạo giáo án AI, nhưng
-        // luôn phản ánh chỉ số MỚI NHẤT của người dùng (không phải giá trị lúc tạo plan).
-        Integer fitnessScore = null;
-        String fitnessLevelStr = null;
-        String bodyTypeStr = null;
-        if (profile != null && profile.getAge() != null
-                && profile.getHeight() != null && profile.getWeight() != null) {
-            double fs = fitnessCalculator.calculateFS(
-                    profile.getAge(), profile.getHeight(), profile.getWeight(), profile.getGender());
-            FitnessCalculator.FsLevel fsLevel = fitnessCalculator.getFsLevel(fs);
-            FitnessCalculator.BodyType bodyType = fitnessCalculator.classifyBodyType(
-                    profile.getHeight(), profile.getWeight(), profile.getBmi(),
-                    profile.getGender(), profile.getBodyFatPercentage());
-
-            fitnessScore = (int) Math.round(fs);
-            fitnessLevelStr = fsLevel.name();
-            bodyTypeStr = bodyType.name();
-        }
-
         return WorkoutPlanResponse.builder()
                 .id(plan.getId())
                 .planName(plan.getPlanName())
@@ -670,10 +654,12 @@ public class WorkoutPlanService {
                 .manaMessage(plan.getMaxMana() != null
                         ? ManaMessageHelper.buildMessage(plan.getMaxMana(), plan.getMaxMana())
                         : null)
-                // ── Thể lực / Thể trạng (tính động, không lưu DB) ──
-                .fitnessScore(fitnessScore)
-                .fitnessLevel(fitnessLevelStr)
-                .bodyType(bodyTypeStr)
+                // ── MỚI: Thể lực / Thể trạng — SNAPSHOT, chỉ đọc lại giá trị đã lưu trên plan
+                // lúc tạo giáo án AI. KHÔNG gọi FitnessCalculator ở đây. Giáo án mẫu (template)
+                // hoặc giáo án AI cũ chưa có field này -> tự nhiên là null, không crash. ──
+                .fitnessScore(plan.getFitnessScore())
+                .fitnessLevel(plan.getFitnessLevel() != null ? plan.getFitnessLevel().name() : null)
+                .bodyType(plan.getBodyType() != null ? plan.getBodyType().name() : null)
                 .build();
     }
 

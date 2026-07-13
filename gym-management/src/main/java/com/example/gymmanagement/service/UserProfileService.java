@@ -27,12 +27,18 @@ public class UserProfileService {
         UserProfile profile = profileRepository.findByUserId(user.getId())
                 .orElse(UserProfile.builder().user(user).build());
 
+        // 1. Cập nhật ngày sinh từ request
+        profile.setDateOfBirth(request.getDateOfBirth());
+
+        // 2. Tự động tính tuổi dựa trên ngày sinh (cập nhật vào trường age của Entity)
+        if (request.getDateOfBirth() != null) {
+            int calculatedAge = java.time.Period.between(request.getDateOfBirth(), LocalDate.now()).getYears();
+            profile.setAge(calculatedAge);
+        }
+
         profile.setHeight(request.getHeight());
         profile.setWeight(request.getWeight());
-        profile.setBodyFatPercentage(
-                request.getBodyFatPercentage()
-        );
-        profile.setAge(request.getAge());
+        profile.setBodyFatPercentage(request.getBodyFatPercentage());
         profile.setGender(request.getGender());
         profile.setGoal(request.getGoal());
         profile.setFitnessLevel(request.getFitnessLevel());
@@ -40,7 +46,7 @@ public class UserProfileService {
         profile.setPreferredSessionDuration(request.getPreferredSessionDuration());
         profile.setMedicalConditions(request.getMedicalConditions());
 
-        // Calculate BMI
+        // Calculate BMI (giữ nguyên logic)
         if (request.getHeight() != null && request.getWeight() != null && request.getHeight() > 0) {
             double heightM = request.getHeight() / 100.0;
             double bmi = request.getWeight() / (heightM * heightM);
@@ -55,8 +61,9 @@ public class UserProfileService {
                 profile.getBodyFatPercentage(),
                 "Khởi tạo hồ sơ",
                 ProgressSource.PROFILE,
-                LocalDate.now() //mới thêm
+                LocalDate.now()
         );
+
         return buildResponse(profile, user);
     }
 
@@ -90,10 +97,9 @@ public class UserProfileService {
                 .phone(user.getPhone())
                 .height(profile.getHeight())
                 .weight(profile.getWeight())
-                .bodyFatPercentage(
-                        profile.getBodyFatPercentage()
-                )
-                .age(profile.getAge())
+                .bodyFatPercentage(profile.getBodyFatPercentage())
+                // Thay thế .age(profile.getAge()) bằng dateOfBirth
+                .dateOfBirth(profile.getDateOfBirth())
                 .gender(profile.getGender())
                 .bmi(profile.getBmi())
                 .bmiCategory(bmiCategory)
