@@ -26,4 +26,5 @@ public class ExerciseRequest {
     private Integer maintenanceScore = 0;
 
     private Integer staminaCost = 10; // 0-200, mặc định 10
+    private Boolean usesWeight;
 }

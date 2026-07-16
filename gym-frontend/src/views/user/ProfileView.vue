@@ -42,7 +42,6 @@
               <el-option label="🔥 Giảm cân / Đốt mỡ" value="WEIGHT_LOSS"/>
               <el-option label="💪 Tăng cơ / Tăng sức mạnh" value="MUSCLE_GAIN"/>
               <el-option label="🏃 Tăng sức bền" value="ENDURANCE"/>
-              <el-option label="🤸 Tăng độ linh hoạt" value="FLEXIBILITY"/>
               <el-option label="⚖️ Duy trì thể hình" value="MAINTENANCE"/>
             </el-select>
           </el-form-item>

@@ -30,11 +30,12 @@ public class WorkoutPlanService {
     private final FitnessCalculator fitnessCalculator;
     private final WorkoutPlanExerciseRepository planExerciseRepo;
     private final MembershipRepository membershipRepo;
+    // ── MỚI (Patch 7) ──
+    private final EnduranceTestRepository enduranceTestRepo;
+    private final EstimatedWeeksCalculator estimatedWeeksCalculator;
 
-    // Gói Free chỉ được tạo/đổi giáo án 1 lần/tháng. VIP không giới hạn.
     private static final int FREE_PLAN_LIMIT_PER_MONTH = 1;
 
-    /** Chặn tạo/đổi giáo án nếu user gói Free đã dùng hết lượt trong tháng. VIP luôn được bỏ qua. */
     private void checkPlanGenerationLimit(User user) {
         boolean isVip = membershipRepo.findByUserIdAndIsActiveTrue(user.getId())
                 .map(m -> m.getMembershipType() == MembershipType.VIP)
@@ -54,11 +55,14 @@ public class WorkoutPlanService {
     }
 
     // ─────────────────────────────────────────────────────────
-    // 1. generateAIPlanWithGoal — FS + BodyType + Level + Goal + Mana
+    // 1. generateAIPlanWithGoal — FS + BodyType + Level + Goal + Mana + Target (Patch 7)
     // ─────────────────────────────────────────────────────────
     @Transactional
     public WorkoutPlanResponse generateAIPlanWithGoal(String email, Goal goal,
-                                                      FitnessLevel levelParam, Integer daysPerWeek) {
+                                                      FitnessLevel levelParam, Integer daysPerWeek,
+                                                      Double targetDeltaKg,
+                                                      String enduranceMetric,
+                                                      Double enduranceTargetValue) {
         User user = getUser(email);
         UserProfile profile = profileRepo.findByUserId(user.getId()).orElse(null);
 
@@ -84,9 +88,73 @@ public class WorkoutPlanService {
                 profile.getGender(), profile.getBodyFatPercentage())
                 : FitnessCalculator.BodyType.CAN_DOI;
 
+        // ── MỚI (Patch 7): xác định target theo Goal — Business Rules v2 (LOCKED).
+        // Validate TRƯỚC deactivateAndCleanOldPlan() để tránh huỷ giáo án cũ nếu request lỗi. ──
+        String targetMetricTypeVal = null;
+        Double targetBaselineValueVal = null;
+        Double targetGoalValueVal = null;
+        Double targetCurrentValueVal = null;
+
+        switch (goal) {
+            case MUSCLE_GAIN -> {
+                if (targetDeltaKg == null || targetDeltaKg <= 0)
+                    throw new RuntimeException("Mục tiêu Tăng cơ yêu cầu targetDeltaKg > 0");
+                if (startWeight == null)
+                    throw new RuntimeException("Cần có cân nặng trong hồ sơ để tạo giáo án theo mục tiêu này");
+                targetBaselineValueVal = startWeight;
+                targetGoalValueVal = startWeight + targetDeltaKg;
+                targetCurrentValueVal = startWeight;
+            }
+            case WEIGHT_LOSS -> {
+                if (targetDeltaKg == null || targetDeltaKg >= 0)
+                    throw new RuntimeException("Mục tiêu Giảm cân yêu cầu targetDeltaKg < 0");
+                if (startWeight == null)
+                    throw new RuntimeException("Cần có cân nặng trong hồ sơ để tạo giáo án theo mục tiêu này");
+                targetBaselineValueVal = startWeight;
+                targetGoalValueVal = startWeight + targetDeltaKg;
+                targetCurrentValueVal = startWeight;
+            }
+            case ENDURANCE -> {
+                if (enduranceMetric == null || enduranceTargetValue == null)
+                    throw new RuntimeException("Mục tiêu Sức bền yêu cầu enduranceMetric và enduranceTargetValue");
+                if (!List.of("PUSHUP_REPS", "PLANK_SECONDS", "SQUAT_REPS").contains(enduranceMetric))
+                    throw new RuntimeException("enduranceMetric không hợp lệ: " + enduranceMetric);
+
+                EnduranceTest test = enduranceTestRepo.findByUserId(user.getId())
+                        .orElseThrow(() -> new RuntimeException(
+                                "Bạn cần thực hiện bài test sức bền trước khi tạo giáo án cho mục tiêu này"));
+
+                Double baseline = switch (enduranceMetric) {
+                    case "PUSHUP_REPS" -> test.getPushupReps() != null ? test.getPushupReps().doubleValue() : null;
+                    case "PLANK_SECONDS" -> test.getPlankSeconds() != null ? test.getPlankSeconds().doubleValue() : null;
+                    case "SQUAT_REPS" -> test.getSquatReps() != null ? test.getSquatReps().doubleValue() : null;
+                    default -> null;
+                };
+                if (baseline == null)
+                    throw new RuntimeException("Kết quả bài test cho " + enduranceMetric + " chưa có dữ liệu");
+
+                targetMetricTypeVal = enduranceMetric;
+                targetBaselineValueVal = baseline;
+                targetGoalValueVal = enduranceTargetValue;
+                // targetCurrentValue KHÔNG lưu cứng cho ENDURANCE — luôn đọc live từ EnduranceTest (LOCKED)
+                targetCurrentValueVal = null;
+            }
+            case MAINTENANCE -> {
+                // Không có targetGoalValue (LOCKED) — chỉ cần baseline để Patch 9 so sánh độ lệch.
+                targetBaselineValueVal = startWeight;
+                targetGoalValueVal = null;
+                targetCurrentValueVal = startWeight;
+            }
+        }
+
+        // ── MỚI (Patch 7): estimatedWeeks — tính qua module độc lập, KHÔNG hardcode ──
+        int estimatedWeeks = estimatedWeeksCalculator.calculate(
+                goal, level, targetDeltaKg,
+                goal == Goal.ENDURANCE ? targetBaselineValueVal : null,
+                goal == Goal.ENDURANCE ? targetGoalValueVal : null);
+
         deactivateAndCleanOldPlan(user.getId());
 
-        // ── Quy đổi FS (0-100) sang Mana (0-200) ──
         int maxMana = (int) Math.round(fs * 2);
 
         WorkoutPlan plan = WorkoutPlan.builder()
@@ -94,22 +162,25 @@ public class WorkoutPlanService {
                 .planName(buildPlanName(goal, level))
                 .description(buildPlanDesc(goal, level, daysPerWeek, profile))
                 .goal(goal).targetLevel(level)
-                .durationWeeks(6).sessionsPerWeek(daysPerWeek).currentWeek(1)
+                .durationWeeks(estimatedWeeks)
+                .estimatedWeeks(estimatedWeeks)
+                .sessionsPerWeek(daysPerWeek).currentWeek(1)
                 .startingBmi(startBmi).startingWeight(startWeight)
                 .isActive(true).isAiGenerated(true)
                 .maxMana(maxMana)
                 .currentMana(maxMana)
-                // confirmedScheduleDows: KHÔNG set -> mặc định null (giáo án mới luôn chưa chốt lịch)
-                // ── MỚI: Snapshot Thể lực/Thể trạng tại thời điểm tạo giáo án — tính ĐÚNG 1 LẦN
-                // ở đây, dùng chính fs/fsLevel/bodyType vừa tính ở trên (không tính lại lần nữa,
-                // không gọi thêm FitnessCalculator) ──
                 .fitnessScore((int) Math.round(fs))
                 .fitnessLevel(fsLevel)
                 .bodyType(bodyType)
+                .targetMetricType(targetMetricTypeVal)
+                .targetBaselineValue(targetBaselineValueVal)
+                .targetGoalValue(targetGoalValueVal)
+                .targetCurrentValue(targetCurrentValueVal)
+                .targetAchieved(false)
                 .build();
         planRepo.save(plan);
 
-        List<WorkoutPlanDay> days = buildPlanDaysNew(plan, goal, level, fsLevel, bodyType, daysPerWeek);
+        List<WorkoutPlanDay> days = buildPlanDaysNew(plan, goal, level, fsLevel, bodyType, daysPerWeek, profile, fs);
         dayRepo.saveAll(days);
         plan.setPlanDays(days);
 
@@ -138,8 +209,19 @@ public class WorkoutPlanService {
     }
 
     // ─────────────────────────────────────────────────────────
-    // 6. adjustPlanAfterWeek — đơn giản hóa (giữ nguyên logic cũ)
+    // 6. adjustPlanAfterWeek — giữ nguyên (Patch 8 sẽ sửa)
     // ─────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
+    // 6. adjustPlanAfterWeek — Patch 8: Business Rules v2 (chỉ áp dụng khi estimatedWeeks != null)
+    // ─────────────────────────────────────────────────────────
+    private static final double PROGRESS_TOLERANCE_PERCENT = 5.0;
+    private static final int MIN_DURATION_WEEKS = 1;
+    private static final int MAX_DURATION_WEEKS = 50;
+    private static final String MAX_DURATION_END_MESSAGE =
+            "Bạn đã hoàn thành thời lượng tối đa của giáo án nhưng chưa đạt mục tiêu. " +
+                    "Hãy cân nhắc đánh giá lại tình trạng sức khỏe và tham khảo huấn luyện viên hoặc chuyên gia " +
+                    "nếu cần trước khi tiếp tục với một giáo án mới.";
+
     @Transactional
     public WorkoutPlanResponse adjustPlanAfterWeek(Long planId, String email,
                                                    Double newWeight, Double newBodyFat) {
@@ -148,8 +230,6 @@ public class WorkoutPlanService {
                 .orElseThrow(() -> new RuntimeException("Plan not found"));
 
         int week = plan.getCurrentWeek() != null ? plan.getCurrentWeek() : 1;
-        long completed = sessionRepo.countCompletedInWeek(user.getId(), planId, week);
-        int  target    = plan.getSessionsPerWeek();
 
         if (newWeight != null) {
             plan.setStartingWeight(newWeight);
@@ -167,14 +247,70 @@ public class WorkoutPlanService {
         }
 
         String note = null;
-        if (completed < target) {
-            plan.setDurationWeeks(plan.getDurationWeeks() + 1);
-            note = "📅 Bạn bỏ " + (target - completed) + " buổi tuần này. Đã gia hạn thêm 1 tuần.";
+        boolean endPlanNow = false;
+
+        if (plan.getEstimatedWeeks() == null) {
+            // ── Giáo án cũ (tạo trước Patch 7) — chạy nguyên logic cũ (LOCKED) ──
+            long completed = sessionRepo.countCompletedInWeek(user.getId(), planId, week);
+            int  target    = plan.getSessionsPerWeek();
+            if (completed < target) {
+                plan.setDurationWeeks(plan.getDurationWeeks() + 1);
+                note = "📅 Bạn bỏ " + (target - completed) + " buổi tuần này. Đã gia hạn thêm 1 tuần.";
+            }
+        } else {
+            // ── Business Rules v2 ──
+            Double current = resolveCurrentTargetValue(plan, newWeight);
+
+            // ENDURANCE không ghi targetCurrentValue vào WorkoutPlan (LOCKED)
+            if (plan.getGoal() != Goal.ENDURANCE && current != null) {
+                plan.setTargetCurrentValue(current);
+            }
+
+            if (plan.getGoal() == Goal.MAINTENANCE) {
+                // ── Chỉ chuẩn bị dữ liệu cho Patch 9 — không đánh giá đạt/chưa đạt,
+                // không điều chỉnh durationWeeks (không có targetGoalValue để so sánh) ──
+            } else if (plan.getTargetBaselineValue() != null && plan.getTargetGoalValue() != null && current != null) {
+                double baseline = plan.getTargetBaselineValue();
+                double goalVal = plan.getTargetGoalValue();
+                Boolean achieved = checkAchieved(plan.getGoal(), baseline, goalVal, current);
+
+                if (Boolean.TRUE.equals(achieved)) {
+                    plan.setTargetAchieved(true);
+                    plan.setIsCompleted(true);
+                    plan.setIsActive(false);
+                    endPlanNow = true;
+                    note = "🎉 Chúc mừng! Bạn đã đạt mục tiêu của giáo án.";
+                } else {
+                    Double percentGoal = computePercentGoal(plan.getGoal(), baseline, goalVal, current);
+                    if (percentGoal != null) {
+                        double percentTime = (double) week / plan.getEstimatedWeeks() * 100;
+                        double gap = percentGoal - percentTime;
+
+                        int newDuration = plan.getDurationWeeks();
+                        if (gap > PROGRESS_TOLERANCE_PERCENT) {
+                            newDuration -= 1;
+                            note = "🚀 Tiến độ nhanh hơn dự kiến. Đã rút ngắn 1 tuần.";
+                        } else if (gap < -PROGRESS_TOLERANCE_PERCENT) {
+                            newDuration += 1;
+                            note = "🐢 Tiến độ chậm hơn dự kiến. Đã gia hạn thêm 1 tuần.";
+                        }
+                        newDuration = Math.max(MIN_DURATION_WEEKS, Math.min(MAX_DURATION_WEEKS, newDuration));
+                        plan.setDurationWeeks(newDuration);
+
+                        if (newDuration >= MAX_DURATION_WEEKS) {
+                            plan.setIsCompleted(true);
+                            plan.setIsActive(false);
+                            endPlanNow = true;
+                            note = MAX_DURATION_END_MESSAGE;
+                        }
+                    }
+                }
+            }
         }
 
         plan.setCurrentWeek(week + 1);
 
-        if (plan.getCurrentWeek() > plan.getDurationWeeks()) {
+        if (!endPlanNow && plan.getCurrentWeek() > plan.getDurationWeeks()) {
             plan.setIsCompleted(true);
             plan.setIsActive(false);
         }
@@ -188,9 +324,54 @@ public class WorkoutPlanService {
         return resp;
     }
 
-    // ─────────────────────────────────────────────────────────
-    // MỚI: Nhập tạ khởi điểm (chỉ 1 lần, tuần đầu)
-    // ─────────────────────────────────────────────────────────
+    /** Lấy giá trị "current" theo Goal — MUSCLE_GAIN/WEIGHT_LOSS/MAINTENANCE dùng newWeight
+     *  (fallback về targetCurrentValue cũ nếu không nhập); ENDURANCE đọc LIVE từ EnduranceTest. */
+    private Double resolveCurrentTargetValue(WorkoutPlan plan, Double newWeight) {
+        return switch (plan.getGoal()) {
+            case MUSCLE_GAIN, WEIGHT_LOSS, MAINTENANCE ->
+                    newWeight != null ? newWeight : plan.getTargetCurrentValue();
+            case ENDURANCE -> readLiveEnduranceValue(plan);
+        };
+    }
+
+    private Double readLiveEnduranceValue(WorkoutPlan plan) {
+        if (plan.getUser() == null || plan.getTargetMetricType() == null) return null;
+        String metricType = plan.getTargetMetricType();
+        return enduranceTestRepo.findByUserId(plan.getUser().getId())
+                .map(test -> switch (metricType) {
+                    case "PUSHUP_REPS" -> test.getPushupReps() != null ? test.getPushupReps().doubleValue() : null;
+                    case "PLANK_SECONDS" -> test.getPlankSeconds() != null ? test.getPlankSeconds().doubleValue() : null;
+                    case "SQUAT_REPS" -> test.getSquatReps() != null ? test.getSquatReps().doubleValue() : null;
+                    default -> null;
+                })
+                .orElse(null);
+    }
+
+    /** Ngưỡng đạt mục tiêu — LOCKED cho toàn bộ Goal có targetGoalValue (MUSCLE_GAIN,
+     *  WEIGHT_LOSS, ENDURANCE dùng chung công thức baseline + (goal-baseline)×95%,
+     *  đạt khi current >= threshold). WEIGHT_LOSS đảo chiều. MAINTENANCE không áp dụng. */
+    private Boolean checkAchieved(Goal goal, double baseline, double goalVal, double current) {
+        return switch (goal) {
+            case MUSCLE_GAIN, ENDURANCE -> current >= (baseline + (goalVal - baseline) * 0.95);
+            case WEIGHT_LOSS -> current <= (baseline - (baseline - goalVal) * 0.95);
+            default -> null;
+        };
+    }
+
+    /** %mục tiêu đã hoàn thành — dùng để so với %thời gian đã dùng (currentWeek/estimatedWeeks). */
+    private Double computePercentGoal(Goal goal, double baseline, double goalVal, double current) {
+        return switch (goal) {
+            case MUSCLE_GAIN, ENDURANCE ->
+                    (goalVal - baseline) != 0 ? (current - baseline) / (goalVal - baseline) * 100 : null;
+            case WEIGHT_LOSS ->
+                    (baseline - goalVal) != 0 ? (baseline - current) / (baseline - goalVal) * 100 : null;
+            default -> null;
+        };
+    }
+
+
+
+
     @Transactional
     public WorkoutPlanExerciseResponse setBaseWeight(Long planExerciseId, Double weight) {
         WorkoutPlanExercise pe = planExerciseRepo.findById(planExerciseId)
@@ -206,11 +387,6 @@ public class WorkoutPlanService {
         return buildExResponse(pe);
     }
 
-    // ─────────────────────────────────────────────────────────
-    // MỚI: Xác nhận lịch tập chuẩn (mục 8.3 I.docx)
-    // Chỉ dùng khi hệ thống KHÔNG còn xác định được lịch chuẩn nào phù hợp
-    // (survivors == 0) và người dùng chủ động chọn lại 1 trong các lịch khuyến nghị.
-    // ─────────────────────────────────────────────────────────
     @Transactional
     public WorkoutPlanResponse confirmSchedule(String email, Long planId, List<Integer> dayOfWeek) {
         User user = getUser(email);
@@ -232,9 +408,6 @@ public class WorkoutPlanService {
         return toPlanResponse(plan, profileRepo.findByUserId(user.getId()).orElse(null));
     }
 
-    // ─────────────────────────────────────────────────────────
-    // 4. ADMIN: Tạo template thủ công
-    // ─────────────────────────────────────────────────────────
     @Transactional
     public WorkoutPlanResponse createManualTemplate(WorkoutTemplateRequest req) {
         validateTemplateRequest(req);
@@ -313,9 +486,6 @@ public class WorkoutPlanService {
         planRepo.save(plan);
     }
 
-    // ─────────────────────────────────────────────────────────
-    // 5. USER: Chọn 1 template -> copy thành giáo án active của user
-    // ─────────────────────────────────────────────────────────
     @Transactional
     public WorkoutPlanResponse selectTemplate(String email, Long templateId) {
         User user = getUser(email);
@@ -344,7 +514,6 @@ public class WorkoutPlanService {
                 .isActive(true)
                 .isAiGenerated(false)
                 .isTemplate(false)
-                // Template không dùng hệ thống mana AI -> để null, ManaService sẽ tự bỏ qua
                 .build();
         planRepo.save(newPlan);
 
@@ -381,9 +550,6 @@ public class WorkoutPlanService {
         return toPlanResponse(newPlan, profile);
     }
 
-    // ─────────────────────────────────────────────────────────
-    // Helper cho template
-    // ─────────────────────────────────────────────────────────
     private void validateTemplateRequest(WorkoutTemplateRequest req) {
         if (req.getDays() == null || req.getDays().isEmpty()) {
             throw new RuntimeException("Template cần ít nhất 1 ngày tập");
@@ -427,10 +593,6 @@ public class WorkoutPlanService {
         return days;
     }
 
-    // ─────────────────────────────────────────────────────────
-    // Các hàm hỗ trợ
-    // ─────────────────────────────────────────────────────────
-    // ── SỬA: thêm maxRequired theo Goal (mục 4 I.docx) ──
     private int calcSessionsPerWeek(Goal goal, Integer requested, UserProfile profile) {
         int fromProfile = (profile != null && profile.getAvailableDaysPerWeek() != null)
                 ? profile.getAvailableDaysPerWeek() : 3;
@@ -439,12 +601,10 @@ public class WorkoutPlanService {
         int minRequired = switch (goal) {
             case MUSCLE_GAIN, WEIGHT_LOSS -> 4;
             case ENDURANCE, MAINTENANCE -> 3;
-            case FLEXIBILITY -> 2;
         };
         int maxRequired = switch (goal) {
             case MUSCLE_GAIN, WEIGHT_LOSS -> 6;
             case ENDURANCE, MAINTENANCE -> 5;
-            case FLEXIBILITY -> 4;
         };
 
         val = Math.max(val, minRequired);
@@ -460,13 +620,13 @@ public class WorkoutPlanService {
         return level;
     }
 
-    // ── SỬA: dùng MuscleGroupSplitPlanner.buildWeekPlan (bảng 6.1.x + AdjustedQuota/LRM)
-    // và ScheduleCatalog cho dayOfWeek mặc định — thay cho bảng cứng + công thức xoay vòng cũ ──
     private List<WorkoutPlanDay> buildPlanDaysNew(WorkoutPlan plan, Goal goal,
                                                   FitnessLevel level,
                                                   FitnessCalculator.FsLevel fsLevel,
                                                   FitnessCalculator.BodyType bodyType,
-                                                  int sessions) {
+                                                  int sessions,
+                                                  UserProfile profile,
+                                                  double fs) {
         List<Map<MuscleGroup, Integer>> weekPlan = MuscleGroupSplitPlanner.buildWeekPlan(goal, level, sessions);
         List<Integer> defaultSchedule = ScheduleCatalog.candidatesFor(sessions).get(0);
         String[] names = {"", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"};
@@ -479,7 +639,7 @@ public class WorkoutPlanService {
                     .dayOfWeek(dow)
                     .dayName(names[dow])
                     .build();
-            day.setExercises(buildExercisesNew(day, weekPlan.get(i), goal, level, fsLevel, bodyType));
+            day.setExercises(buildExercisesNew(day, weekPlan.get(i), goal, level, fsLevel, bodyType, profile, fs));
             days.add(day);
         }
         return days;
@@ -490,7 +650,9 @@ public class WorkoutPlanService {
                                                         Goal goal,
                                                         FitnessLevel level,
                                                         FitnessCalculator.FsLevel fsLevel,
-                                                        FitnessCalculator.BodyType bodyType) {
+                                                        FitnessCalculator.BodyType bodyType,
+                                                        UserProfile profile,
+                                                        double fs) {
         var srResult = fitnessCalculator.resolveFinalSetsReps(fsLevel, goal, bodyType);
         int finalSets = srResult.sets();
         int finalReps = srResult.reps();
@@ -512,6 +674,9 @@ public class WorkoutPlanService {
                     note = (note == null) ? hintText : note + " — " + hintText;
                 }
 
+                Double recommendedWeightKg = computeRecommendedWeightKg(
+                        mg, ex.getUsesWeight(), fs, bodyType, goal, profile);
+
                 result.add(WorkoutPlanExercise.builder()
                         .planDay(day).exercise(ex)
                         .sets(finalSets)
@@ -521,14 +686,87 @@ public class WorkoutPlanService {
                         .restSeconds(calcRest(ex.getRestSeconds(), goal))
                         .orderIndex(idx++)
                         .notes(note)
+                        .recommendedWeightKg(recommendedWeightKg)
                         .build());
             }
         }
         return result;
     }
 
-    // ── SỬA: thêm tie-break theo ID tăng dần khi goalScore bằng nhau (mục 7.2 I.docx) —
-    // đảm bảo kết quả xếp hạng deterministic, không phụ thuộc thứ tự trả về của DB ──
+    private Double computeRecommendedWeightKg(MuscleGroup mg, Boolean usesWeight, double fs,
+                                              FitnessCalculator.BodyType bodyType, Goal goal,
+                                              UserProfile profile) {
+        if (usesWeight == null || !usesWeight) return null;
+
+        Double muscleFactor = muscleFactorFor(mg);
+        if (muscleFactor == null) return null;
+
+        if (profile == null || profile.getWeight() == null || profile.getHeight() == null) return null;
+
+        double weight = profile.getWeight();
+        double height = profile.getHeight();
+        String gender = profile.getGender();
+
+        double fsFactor = fsFactorFor(fs);
+        double bodyTypeFactor = bodyTypeFactorFor(bodyType);
+        double goalFactor = goalFactorFor(goal);
+
+        double idealWeight = fitnessCalculator.wChuan(height, gender);
+        double delta = weight - idealWeight;
+        double deltaFactor = deltaFactorFor(delta);
+
+        double raw = weight * muscleFactor * fsFactor * bodyTypeFactor * goalFactor * deltaFactor;
+        return Math.round(raw * 2) / 2.0;
+    }
+
+    private Double muscleFactorFor(MuscleGroup mg) {
+        return switch (mg) {
+            case CHEST -> 0.40;
+            case BACK -> 0.50;
+            case LEGS -> 0.60;
+            case SHOULDERS -> 0.25;
+            case ARMS -> 0.20;
+            case CORE -> 0.15;
+            default -> null;
+        };
+    }
+
+    private double fsFactorFor(double fs) {
+        if (fs >= 90) return 1.20;
+        if (fs >= 80) return 1.10;
+        if (fs >= 60) return 1.00;
+        if (fs >= 40) return 0.85;
+        return 0.75;
+    }
+
+    private double bodyTypeFactorFor(FitnessCalculator.BodyType bt) {
+        return switch (bt) {
+            case CAO_GAY -> 0.85;
+            case GAY_CAN_DOI -> 0.90;
+            case CAN_DOI -> 1.00;
+            case CO_BAP -> 1.10;
+            case VAN_DONG_VIEN -> 1.20;
+            case THUA_CAN -> 0.95;
+        };
+    }
+
+    private double goalFactorFor(Goal goal) {
+        return switch (goal) {
+            case MUSCLE_GAIN -> 1.05;
+            case WEIGHT_LOSS -> 0.90;
+            case MAINTENANCE -> 1.00;
+            case ENDURANCE -> 0.80;
+        };
+    }
+
+    private double deltaFactorFor(double delta) {
+        if (delta < -10) return 0.85;
+        if (delta < -5) return 0.90;
+        if (delta <= 5) return 1.00;
+        if (delta <= 10) return 1.05;
+        return 1.00;
+    }
+
     private List<Exercise> getExercisesByLevelAndGoal(MuscleGroup mg, Goal goal,
                                                       FitnessLevel level, int need) {
         List<Exercise> result = new ArrayList<>();
@@ -560,7 +798,6 @@ public class WorkoutPlanService {
             case MUSCLE_GAIN -> ex.getMuscleGainScore()   != null ? ex.getMuscleGainScore()   : 0;
             case WEIGHT_LOSS -> ex.getWeightLossScore()   != null ? ex.getWeightLossScore()   : 0;
             case ENDURANCE   -> ex.getEnduranceScore()    != null ? ex.getEnduranceScore()    : 0;
-            case FLEXIBILITY -> ex.getFlexibilityScore()  != null ? ex.getFlexibilityScore()  : 0;
             default          -> ex.getMaintenanceScore()  != null ? ex.getMaintenanceScore()  : 0;
         };
     }
@@ -583,7 +820,6 @@ public class WorkoutPlanService {
         };
     }
 
-    // ── SỬA: giờ chỉ nhận sessions, không còn phụ thuộc Goal (mục 8.2 I.docx) ──
     public List<List<Integer>> suggestDays(int sessions) {
         return ScheduleCatalog.candidatesFor(sessions);
     }
@@ -593,7 +829,6 @@ public class WorkoutPlanService {
             case MUSCLE_GAIN -> "💪 Tăng cơ cần nghỉ ít nhất 1 ngày giữa các buổi tập nhóm cơ giống nhau.";
             case WEIGHT_LOSS -> "🔥 Giảm cân hiệu quả khi tập liên tục.";
             case ENDURANCE -> "🏃 Sức bền cần xen kẽ ngày cardio và phục hồi.";
-            case FLEXIBILITY -> "🤸 Linh hoạt có thể tập mỗi ngày.";
             default -> "⚖️ Duy trì đều đặn.";
         };
     }
@@ -603,7 +838,6 @@ public class WorkoutPlanService {
             case MUSCLE_GAIN -> ex.getMuscleGainScore() != null ? ex.getMuscleGainScore() : 0;
             case WEIGHT_LOSS -> ex.getWeightLossScore() != null ? ex.getWeightLossScore() : 0;
             case ENDURANCE -> ex.getEnduranceScore() != null ? ex.getEnduranceScore() : 0;
-            case FLEXIBILITY -> ex.getFlexibilityScore() != null ? ex.getFlexibilityScore() : 0;
             default -> ex.getMaintenanceScore() != null ? ex.getMaintenanceScore() : 0;
         };
         if (score >= 9) return "⭐ Hàng đầu cho mục tiêu này";
@@ -623,6 +857,21 @@ public class WorkoutPlanService {
                 ? ScheduleCatalog.candidatesFor(plan.getSessionsPerWeek())
                 : null;
         String note = buildScheduleNote(plan.getGoal(), plan.getSessionsPerWeek());
+
+        // ── MỚI (Patch 7): ENDURANCE luôn đọc targetCurrentValue LIVE từ EnduranceTest,
+        // KHÔNG dùng plan.getTargetCurrentValue() (cột này luôn null với ENDURANCE — LOCKED) ──
+        Double liveTargetCurrentValue = plan.getTargetCurrentValue();
+        if (plan.getGoal() == Goal.ENDURANCE && plan.getUser() != null && plan.getTargetMetricType() != null) {
+            String metricType = plan.getTargetMetricType();
+            liveTargetCurrentValue = enduranceTestRepo.findByUserId(plan.getUser().getId())
+                    .map(test -> switch (metricType) {
+                        case "PUSHUP_REPS" -> test.getPushupReps() != null ? test.getPushupReps().doubleValue() : null;
+                        case "PLANK_SECONDS" -> test.getPlankSeconds() != null ? test.getPlankSeconds().doubleValue() : null;
+                        case "SQUAT_REPS" -> test.getSquatReps() != null ? test.getSquatReps().doubleValue() : null;
+                        default -> null;
+                    })
+                    .orElse(null);
+        }
 
         return WorkoutPlanResponse.builder()
                 .id(plan.getId())
@@ -648,18 +897,20 @@ public class WorkoutPlanService {
                 .weightAdjustmentNote(plan.getWeightAdjustmentNote())
                 .suggestedDays(suggested)
                 .scheduleNote(Boolean.TRUE.equals(plan.getIsAiGenerated()) ? note : null)
-                // ── Mana ──
                 .maxMana(plan.getMaxMana())
                 .currentMana(plan.getCurrentMana())
                 .manaMessage(plan.getMaxMana() != null
                         ? ManaMessageHelper.buildMessage(plan.getMaxMana(), plan.getMaxMana())
                         : null)
-                // ── MỚI: Thể lực / Thể trạng — SNAPSHOT, chỉ đọc lại giá trị đã lưu trên plan
-                // lúc tạo giáo án AI. KHÔNG gọi FitnessCalculator ở đây. Giáo án mẫu (template)
-                // hoặc giáo án AI cũ chưa có field này -> tự nhiên là null, không crash. ──
                 .fitnessScore(plan.getFitnessScore())
                 .fitnessLevel(plan.getFitnessLevel() != null ? plan.getFitnessLevel().name() : null)
                 .bodyType(plan.getBodyType() != null ? plan.getBodyType().name() : null)
+                .targetMetricType(plan.getTargetMetricType())
+                .targetBaselineValue(plan.getTargetBaselineValue())
+                .targetGoalValue(plan.getTargetGoalValue())
+                .targetCurrentValue(liveTargetCurrentValue)
+                .targetAchieved(plan.getTargetAchieved())
+                .estimatedWeeks(plan.getEstimatedWeeks())
                 .build();
     }
 
@@ -700,6 +951,7 @@ public class WorkoutPlanService {
                 .baseWeightKg(pe.getBaseWeightKg())
                 .currentWeightKg(pe.getCurrentWeightKg())
                 .weightJustRevealed(justRevealed)
+                .recommendedWeightKg(pe.getRecommendedWeightKg())
                 .build();
     }
 
@@ -708,7 +960,6 @@ public class WorkoutPlanService {
             case WEIGHT_LOSS -> "Fat Burning";
             case MUSCLE_GAIN -> "Muscle Building";
             case ENDURANCE -> "Endurance";
-            case FLEXIBILITY -> "Flexibility";
             default -> "Balanced";
         };
         String l = switch (lv) {
@@ -724,12 +975,11 @@ public class WorkoutPlanService {
             case WEIGHT_LOSS -> "giảm cân & đốt mỡ";
             case MUSCLE_GAIN -> "tăng cơ & sức mạnh";
             case ENDURANCE -> "tăng sức bền";
-            case FLEXIBILITY -> "tăng linh hoạt";
             default -> "duy trì thể hình";
         };
         String bmiNote = (profile != null && profile.getBmi() != null)
                 ? " (BMI hiện tại: " + profile.getBmi() + ")" : "";
-        return String.format("Giáo án 6 tuần cho mục tiêu %s%s. %d buổi/tuần.",
+        return String.format("Giáo án AI cho mục tiêu %s%s. %d buổi/tuần. Cường độ điều chỉnh tự động theo tiến độ hàng tuần.",
                 gv, bmiNote, days);
     }
 

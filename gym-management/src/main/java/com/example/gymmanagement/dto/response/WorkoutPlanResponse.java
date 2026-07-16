@@ -24,11 +24,9 @@ public class WorkoutPlanResponse {
     private LocalDate  weekStartDate;
     private LocalDateTime createdAt;
 
-    // Starting metrics
     private Double startingBmi;
     private Double startingWeight;
 
-    // Adjustments applied
     private Integer difficultyAdjustment;
     private Integer setsAdjustment;
     private Integer repsAdjustment;
@@ -40,7 +38,6 @@ public class WorkoutPlanResponse {
 
     private String weightAdjustmentNote;
 
-    // Tiến độ tuần hiện tại
     private Integer enrolledThisWeek;
     private Integer completedThisWeek;
 
@@ -48,12 +45,16 @@ public class WorkoutPlanResponse {
     private Integer currentMana;
     private String manaMessage;
 
-    // ── MỚI: Thể lực / Thể trạng — tính ĐỘNG mỗi lần trả API từ UserProfile hiện tại
-    // qua FitnessCalculator, KHÔNG lưu DB, KHÔNG lưu trong entity WorkoutPlan.
-    // fitnessLevel: "EXCELLENT" | "GOOD" | "AVERAGE" | "WEAK" (FitnessCalculator.FsLevel)
-    // bodyType: "CAO_GAY" | "GAY_CAN_DOI" | "CAN_DOI" | "CO_BAP" | "VAN_DONG_VIEN" | "THUA_CAN"
-    // Có thể null nếu không xác định được (ví dụ template không gắn UserProfile).
     private Integer fitnessScore;
     private String  fitnessLevel;
     private String  bodyType;
+
+    private String  targetMetricType;
+    private Double  targetBaselineValue;
+    private Double  targetGoalValue;
+    private Double  targetCurrentValue;
+    private Boolean targetAchieved;
+
+    // ── MỚI (Patch 7): thời lượng ước tính ban đầu, cố định, dùng làm mẫu số %thời gian ──
+    private Integer estimatedWeeks;
 }

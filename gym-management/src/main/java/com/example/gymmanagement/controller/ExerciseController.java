@@ -64,8 +64,8 @@ public class ExerciseController {
                 .enduranceScore(req.getEnduranceScore()     != null ? req.getEnduranceScore()    : 0)
                 .flexibilityScore(req.getFlexibilityScore() != null ? req.getFlexibilityScore() : 0)
                 .maintenanceScore(req.getMaintenanceScore() != null ? req.getMaintenanceScore() : 0)
-                // ── MỚI ──
                 .staminaCost(req.getStaminaCost() != null ? req.getStaminaCost() : 10)
+                .usesWeight(req.getUsesWeight())
                 .isActive(true).build();
         return ResponseEntity.ok(ApiResponse.success(exerciseRepository.save(ex), "Đã thêm bài tập!"));
     }
@@ -92,8 +92,8 @@ public class ExerciseController {
         if (req.getEnduranceScore()    != null) ex.setEnduranceScore(req.getEnduranceScore());
         if (req.getFlexibilityScore()  != null) ex.setFlexibilityScore(req.getFlexibilityScore());
         if (req.getMaintenanceScore()  != null) ex.setMaintenanceScore(req.getMaintenanceScore());
-        // ── MỚI ──
         if (req.getStaminaCost()       != null) ex.setStaminaCost(req.getStaminaCost());
+        if (req.getUsesWeight()        != null) ex.setUsesWeight(req.getUsesWeight());
         return ResponseEntity.ok(ApiResponse.success(exerciseRepository.save(ex), "Đã cập nhật!"));
     }
 

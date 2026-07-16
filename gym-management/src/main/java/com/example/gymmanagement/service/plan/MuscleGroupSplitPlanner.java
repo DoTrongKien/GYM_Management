@@ -8,15 +8,15 @@ import java.util.*;
 
 /**
  * Sinh "nhóm cơ theo từng buổi trong tuần" (dayIndex, KHÔNG phải dayOfWeek) và "số bài
- * tập/nhóm cơ/buổi" theo đúng I.docx mục 6 — bảng tra cứu tường minh (6.1.1 → 6.1.5),
- * KHÔNG dùng công thức xoay vòng như bản cũ.
+ * tập/nhóm cơ/buổi" theo bảng tra cứu tường minh (mục 6.1.1 → 6.1.3, 6.1.5 — đã bỏ 6.1.4
+ * FLEXIBILITY vì Goal FLEXIBILITY không còn tồn tại).
  *
- * dayIndex (0,1,2,...) là thứ tự buổi tập trong tuần theo bảng 6.1.x, độc lập với
- * dayOfWeek thực tế (dayOfWeek đến từ ScheduleCatalog và được WorkoutPlanService ánh xạ
- * theo đúng thứ tự dayIndex -> vị trí trong candidate lịch).
+ * dayIndex (0,1,2,...) là thứ tự buổi tập trong tuần, độc lập với dayOfWeek thực tế
+ * (dayOfWeek đến từ ScheduleCatalog và được WorkoutPlanService ánh xạ theo đúng thứ tự
+ * dayIndex -> vị trí trong candidate lịch).
  *
  * ────────────────────────────────────────────────────────────────
- * THUẬT TOÁN (mục 6.2 I.docx)
+ * THUẬT TOÁN
  * ────────────────────────────────────────────────────────────────
  * 1) Với mỗi nhóm cơ xuất hiện trong tuần, xác định f = số buổi (ngày) nhóm cơ đó
  *    THỰC SỰ xuất hiện (đếm theo bảng DAY_MUSCLE_GROUPS).
@@ -36,10 +36,10 @@ public final class MuscleGroupSplitPlanner {
 
     // ── Nhóm cơ theo từng buổi trong tuần, tra theo (Goal, sessionsPerWeek) ──
     // Mỗi phần tử ngoài cùng = 1 buổi (dayIndex theo thứ tự), giá trị = các nhóm cơ của buổi đó.
-    // Nguồn: I.docx mục 6.1.1 -> 6.1.5.
+    // ĐÃ XOÁ: entry Goal.FLEXIBILITY.
     private static final Map<Goal, Map<Integer, List<List<MuscleGroup>>>> DAY_MUSCLE_GROUPS = new EnumMap<>(Goal.class);
     static {
-        // ── 6.1.1 MUSCLE_GAIN ──
+        // ── MUSCLE_GAIN ──
         Map<Integer, List<List<MuscleGroup>>> muscleGain = new HashMap<>();
         muscleGain.put(4, List.of(
                 List.of(MuscleGroup.CHEST, MuscleGroup.SHOULDERS, MuscleGroup.ARMS),
@@ -64,7 +64,7 @@ public final class MuscleGroupSplitPlanner {
         ));
         DAY_MUSCLE_GROUPS.put(Goal.MUSCLE_GAIN, muscleGain);
 
-        // ── 6.1.2 WEIGHT_LOSS ──
+        // ── WEIGHT_LOSS ──
         Map<Integer, List<List<MuscleGroup>>> weightLoss = new HashMap<>();
         weightLoss.put(4, List.of(
                 List.of(MuscleGroup.FULL_BODY, MuscleGroup.CARDIO),
@@ -89,7 +89,7 @@ public final class MuscleGroupSplitPlanner {
         ));
         DAY_MUSCLE_GROUPS.put(Goal.WEIGHT_LOSS, weightLoss);
 
-        // ── 6.1.3 ENDURANCE ──
+        // ── ENDURANCE ──
         Map<Integer, List<List<MuscleGroup>>> endurance = new HashMap<>();
         endurance.put(3, List.of(
                 List.of(MuscleGroup.CHEST, MuscleGroup.SHOULDERS, MuscleGroup.CARDIO),
@@ -111,26 +111,7 @@ public final class MuscleGroupSplitPlanner {
         ));
         DAY_MUSCLE_GROUPS.put(Goal.ENDURANCE, endurance);
 
-        // ── 6.1.4 FLEXIBILITY ──
-        Map<Integer, List<List<MuscleGroup>>> flexibility = new HashMap<>();
-        flexibility.put(2, List.of(
-                List.of(MuscleGroup.FULL_BODY, MuscleGroup.CARDIO),
-                List.of(MuscleGroup.FULL_BODY, MuscleGroup.CARDIO)
-        ));
-        flexibility.put(3, List.of(
-                List.of(MuscleGroup.FULL_BODY, MuscleGroup.CARDIO),
-                List.of(MuscleGroup.FULL_BODY, MuscleGroup.CARDIO),
-                List.of(MuscleGroup.FULL_BODY, MuscleGroup.CARDIO)
-        ));
-        flexibility.put(4, List.of(
-                List.of(MuscleGroup.FULL_BODY, MuscleGroup.CARDIO),
-                List.of(MuscleGroup.FULL_BODY, MuscleGroup.CARDIO),
-                List.of(MuscleGroup.FULL_BODY, MuscleGroup.CARDIO),
-                List.of(MuscleGroup.FULL_BODY, MuscleGroup.CARDIO)
-        ));
-        DAY_MUSCLE_GROUPS.put(Goal.FLEXIBILITY, flexibility);
-
-        // ── 6.1.5 MAINTENANCE ──
+        // ── MAINTENANCE ──
         Map<Integer, List<List<MuscleGroup>>> maintenance = new HashMap<>();
         maintenance.put(3, List.of(
                 List.of(MuscleGroup.CHEST, MuscleGroup.SHOULDERS, MuscleGroup.ARMS),
@@ -154,7 +135,7 @@ public final class MuscleGroupSplitPlanner {
     }
 
     // ── BaseQuota: số bài/nhóm cơ/TUẦN theo (Goal, FitnessLevel) ──
-    // Nguồn: bảng "Số bài tập cho mỗi nhóm cơ / TUẦN" ngay dưới mỗi bảng 6.1.x.
+    // ĐÃ XOÁ: entry Goal.FLEXIBILITY.
     private static final Map<Goal, Map<FitnessLevel, Integer>> BASE_QUOTA = new EnumMap<>(Goal.class);
     static {
         Map<FitnessLevel, Integer> strengthLike = new EnumMap<>(FitnessLevel.class);
@@ -163,7 +144,6 @@ public final class MuscleGroupSplitPlanner {
         strengthLike.put(FitnessLevel.ADVANCED, 6);
         BASE_QUOTA.put(Goal.MUSCLE_GAIN, strengthLike);
         BASE_QUOTA.put(Goal.WEIGHT_LOSS, new EnumMap<>(strengthLike));
-        BASE_QUOTA.put(Goal.FLEXIBILITY, new EnumMap<>(strengthLike));
 
         Map<FitnessLevel, Integer> enduranceLike = new EnumMap<>(FitnessLevel.class);
         enduranceLike.put(FitnessLevel.BEGINNER, 3);
@@ -176,7 +156,7 @@ public final class MuscleGroupSplitPlanner {
     /**
      * Trả về, cho từng buổi trong tuần (index = dayIndex, 0..sessions-1), map
      * "nhóm cơ -> số bài tập cần chọn cho nhóm cơ đó trong buổi này".
-     * Thứ tự các entry trong mỗi Map giữ đúng thứ tự xuất hiện của nhóm cơ trong bảng 6.1.x.
+     * Thứ tự các entry trong mỗi Map giữ đúng thứ tự xuất hiện của nhóm cơ trong bảng.
      */
     public static List<Map<MuscleGroup, Integer>> buildWeekPlan(Goal goal, FitnessLevel level, int sessions) {
         List<List<MuscleGroup>> dayGroups = dayGroupsFor(goal, sessions);

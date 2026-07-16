@@ -47,7 +47,7 @@ public class FitnessCalculator {
     }
 
     /** W_chuan dùng chung cho cả FS và BodyType để 2 điểm số nhất quán với nhau. */
-    private double wChuan(double heightCm, String gender) {
+     double wChuan(double heightCm, String gender) {
         double base = (heightCm - 100) * 0.9;
         return isFemale(gender) ? base * 0.9 : base;
     }
@@ -122,6 +122,7 @@ public class FitnessCalculator {
 
     // ── Sets/Reps theo FsLevel × Goal ────────────────────────
     // FIX: đồng bộ đúng số liệu đã chốt ở bảng 3.docx (không còn là số nháp cũ).
+    // ĐÃ XOÁ: case FLEXIBILITY (Goal FLEXIBILITY không còn tồn tại trong hệ thống).
     public int[] calcSetsRepsByFS(FsLevel fsLevel, Goal goal) {
         return switch (goal) {
             case MUSCLE_GAIN -> switch (fsLevel) {
@@ -142,12 +143,6 @@ public class FitnessCalculator {
                 case AVERAGE -> new int[]{3, 13};
                 case WEAK -> new int[]{3, 12};
             };
-            case FLEXIBILITY -> switch (fsLevel) {
-                case EXCELLENT -> new int[]{3, 15};
-                case GOOD -> new int[]{3, 13};
-                case AVERAGE -> new int[]{2, 12};
-                case WEAK -> new int[]{2, 10};
-            };
             case MAINTENANCE -> switch (fsLevel) {
                 case EXCELLENT -> new int[]{3, 10};
                 case GOOD -> new int[]{3, 11};
@@ -159,6 +154,7 @@ public class FitnessCalculator {
 
     // ── Điều chỉnh Sets/Reps theo BodyType × Goal ────────────
     // FIX: WEIGHT_LOSS và ENDURANCE trước đây bị copy-paste giống hệt nhau — đã tách riêng.
+    // ĐÃ XOÁ: case FLEXIBILITY.
     public int[] bodyTypeAdjustment(BodyType bodyType, Goal goal) {
         return switch (goal) {
             case MUSCLE_GAIN -> switch (bodyType) {
@@ -184,14 +180,6 @@ public class FitnessCalculator {
                 case CO_BAP -> new int[]{+1, 0};
                 case VAN_DONG_VIEN -> new int[]{+1, +1};
                 case THUA_CAN -> new int[]{+1, 0};
-            };
-            case FLEXIBILITY -> switch (bodyType) {
-                case CAO_GAY -> new int[]{0, +1};
-                case GAY_CAN_DOI -> new int[]{0, 0};
-                case CAN_DOI -> new int[]{0, 0};
-                case CO_BAP -> new int[]{0, +1};
-                case VAN_DONG_VIEN -> new int[]{0, +1};
-                case THUA_CAN -> new int[]{0, +1};
             };
             case MAINTENANCE -> switch (bodyType) {
                 case CAO_GAY -> new int[]{0, +1};

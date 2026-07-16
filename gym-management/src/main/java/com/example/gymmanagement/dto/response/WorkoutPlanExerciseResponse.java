@@ -20,4 +20,7 @@ public class WorkoutPlanExerciseResponse {
     private Double baseWeightKg;
     private Double currentWeightKg;
     private Boolean weightJustRevealed; // true nếu tạ vừa được cập nhật trong tuần hiện tại -> FE show hộp quà bí ẩn
+
+    // ── MỚI (Patch 3): Mức tạ khuyến nghị — snapshot, map thẳng từ entity, không tính lại ──
+    private Double recommendedWeightKg;
 }

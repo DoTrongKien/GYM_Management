@@ -42,9 +42,15 @@ public class WorkoutPlanController {
             @RequestBody GeneratePlanWithGoalRequest req) {
         return ResponseEntity.ok(ApiResponse.success(
                 planService.generateAIPlanWithGoal(
-                        ud.getUsername(), req.getGoal(),
-                        req.getFitnessLevel(), req.getDaysPerWeek()),
-                "Giáo án AI đã được tạo!"));
+                        ud.getUsername(),
+                        req.getGoal(),
+                        req.getFitnessLevel(),
+                        req.getDaysPerWeek(),
+                        req.getTargetDeltaKg(),
+                        req.getEnduranceMetric(),
+                        req.getEnduranceTargetValue()
+                ),
+                "Giáo án cá nhân hóa đã được tạo!"));
     }
 
     @PostMapping("/{id}/adjust-week")
@@ -69,7 +75,7 @@ public class WorkoutPlanController {
 
             return ResponseEntity.ok(ApiResponse.success(
                     updatedPlan,
-                    "Giáo án đã được AI điều chỉnh thành công cho tuần tiếp theo!"));
+                    "Giáo án đã cá nhân hóa đã được điều chỉnh thành công cho tuần tiếp theo!"));
 
         } catch (NumberFormatException e) {
             return ResponseEntity.badRequest().body(
@@ -118,7 +124,6 @@ public class WorkoutPlanController {
                 Map.of("value","MUSCLE_GAIN", "label","💪 Tăng cơ / Sức mạnh", "minDays","4"),
                 Map.of("value","WEIGHT_LOSS", "label","🔥 Giảm cân / Đốt mỡ",  "minDays","4"),
                 Map.of("value","ENDURANCE",   "label","🏃 Tăng sức bền",        "minDays","3"),
-                Map.of("value","FLEXIBILITY", "label","🤸 Tăng linh hoạt",      "minDays","2"),
                 Map.of("value","MAINTENANCE", "label","⚖️ Duy trì thể hình",    "minDays","3")
         )));
     }

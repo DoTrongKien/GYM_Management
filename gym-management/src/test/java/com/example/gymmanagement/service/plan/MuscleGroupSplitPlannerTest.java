@@ -26,7 +26,6 @@ class MuscleGroupSplitPlannerTest {
             Goal.MUSCLE_GAIN, List.of(4, 5, 6),
             Goal.WEIGHT_LOSS, List.of(4, 5, 6),
             Goal.ENDURANCE, List.of(3, 4, 5),
-            Goal.FLEXIBILITY, List.of(2, 3, 4),
             Goal.MAINTENANCE, List.of(3, 4, 5)
     );
 
@@ -126,24 +125,24 @@ class MuscleGroupSplitPlannerTest {
         assertEquals(weekPlan.get(2), weekPlan.get(5), "Ngày 5 phải lặp lại đúng ngày 2");
     }
 
-    // ============================================================
-    // 5. FLEXIBILITY / BEGINNER / sessions=2: mỗi ngày đều Full body + Cardio,
-    // f=2 cho cả 2 nhóm, BaseQuota=4 -> 2 bài/nhóm/ngày, 2 ngày giống hệt nhau.
-    // (thay thế test "sessions2 full-body" cũ vốn viết cho MUSCLE_GAIN — giờ
-    // MUSCLE_GAIN không còn hỗ trợ sessions=2 theo mục 4 I.docx).
-    // ============================================================
-    @Test
-    void flexibility_beginner_sessions2_caHaiNgayGiongHetNhau() {
-        List<Map<MuscleGroup, Integer>> weekPlan =
-                MuscleGroupSplitPlanner.buildWeekPlan(Goal.FLEXIBILITY, FitnessLevel.BEGINNER, 2);
-
-        Map<MuscleGroup, Integer> expected = Map.of(
-                MuscleGroup.FULL_BODY, 2, MuscleGroup.CARDIO, 2);
-
-        assertEquals(2, weekPlan.size());
-        assertEquals(expected, weekPlan.get(0));
-        assertEquals(expected, weekPlan.get(1));
-    }
+//    // ============================================================
+//    // 5. FLEXIBILITY / BEGINNER / sessions=2: mỗi ngày đều Full body + Cardio,
+//    // f=2 cho cả 2 nhóm, BaseQuota=4 -> 2 bài/nhóm/ngày, 2 ngày giống hệt nhau.
+//    // (thay thế test "sessions2 full-body" cũ vốn viết cho MUSCLE_GAIN — giờ
+//    // MUSCLE_GAIN không còn hỗ trợ sessions=2 theo mục 4 I.docx).
+//    // ============================================================
+//    @Test
+//    void flexibility_beginner_sessions2_caHaiNgayGiongHetNhau() {
+//        List<Map<MuscleGroup, Integer>> weekPlan =
+//                MuscleGroupSplitPlanner.buildWeekPlan(Goal.FLEXIBILITY, FitnessLevel.BEGINNER, 2);
+//
+//        Map<MuscleGroup, Integer> expected = Map.of(
+//                MuscleGroup.FULL_BODY, 2, MuscleGroup.CARDIO, 2);
+//
+//        assertEquals(2, weekPlan.size());
+//        assertEquals(expected, weekPlan.get(0));
+//        assertEquals(expected, weekPlan.get(1));
+//    }
 
     // ============================================================
     // 6. Case đặc biệt: ENDURANCE / BEGINNER / sessions=4.
@@ -179,9 +178,22 @@ class MuscleGroupSplitPlannerTest {
                 () -> MuscleGroupSplitPlanner.buildWeekPlan(Goal.MUSCLE_GAIN, FitnessLevel.BEGINNER, 2),
                 "MUSCLE_GAIN không có cấu hình cho sessions=2 (minRequired đã là 4)");
 
-        assertThrows(IllegalStateException.class,
-                () -> MuscleGroupSplitPlanner.buildWeekPlan(Goal.FLEXIBILITY, FitnessLevel.BEGINNER, 5),
-                "FLEXIBILITY không có cấu hình cho sessions=5 (maxRequired đã là 4)");
+//        assertThrows(IllegalStateException.class,
+//                () -> MuscleGroupSplitPlanner.buildWeekPlan(Goal.FLEXIBILITY, FitnessLevel.BEGINNER, 5),
+//                "FLEXIBILITY không có cấu hình cho sessions=5 (maxRequired đã là 4)");
+//        vì theo Business Rule mới:
+//
+//        MAINTENANCE
+//        sessions hợp lệ = 3,4,5
+//
+//        nên 6 phải ném exception.
+        assertThrows(
+                IllegalStateException.class,
+                () -> MuscleGroupSplitPlanner.buildWeekPlan(
+                        Goal.MAINTENANCE,
+                        FitnessLevel.BEGINNER,
+                        6),
+                "MAINTENANCE không có cấu hình cho sessions=6");
 
         assertThrows(IllegalStateException.class,
                 () -> MuscleGroupSplitPlanner.buildWeekPlan(Goal.ENDURANCE, FitnessLevel.BEGINNER, 6),

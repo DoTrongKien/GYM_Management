@@ -4,18 +4,14 @@ import { ElMessage } from 'element-plus'
 const api = axios.create({
     baseURL: '/api',
     timeout: 15000
-    // Không đặt Content-Type mặc định: axios tự đặt application/json cho payload JSON
-    // và multipart/form-data (kèm boundary) cho FormData khi upload file.
 })
 
-// Request interceptor — attach JWT
 api.interceptors.request.use(config => {
     const token = sessionStorage.getItem('token')
     if (token) config.headers.Authorization = `Bearer ${token}`
     return config
 })
 
-// Response interceptor — handle errors globally
 api.interceptors.response.use(
     res => res.data,
     err => {
@@ -54,15 +50,17 @@ export const planAPI = {
     getAll:       ()     => api.get('/workout-plans'),
     createCustom: (data) => api.post('/workout-plans', data),
     adjustWeek:   (id, data) => api.post(`/workout-plans/${id}/adjust-week`, data),
-    // === User xem & chọn giáo án mẫu do admin tạo ===
     getTemplates:    ()    => api.get('/workout-plans/templates'),
     selectTemplate:  (id)  => api.post(`/workout-plans/templates/${id}/select`),
     setBaseWeight: (planExerciseId, payload) => api.patch(`/workout-plans/plan-exercises/${planExerciseId}/base-weight`, payload),
-    // ── MỚI: lịch tập giờ chỉ phụ thuộc số buổi/tuần (mục 8.2), không còn theo goal ──
-    // Trả về { scheduleOptions: number[][] } — mỗi phần tử là 1 lịch khả dĩ, dạng ISO dayOfWeek (1=Thứ Hai...7=Chủ Nhật)
     suggestDays: (sessions) => api.get('/workout-plans/suggest-days', { params: { sessions } }),
-    // ── MỚI: xác nhận lịch tập chuẩn khi hệ thống không còn tự xác định được (mục 8.3) ──
     confirmSchedule: (id, dayOfWeek) => api.post(`/workout-plans/${id}/confirm-schedule`, { dayOfWeek })
+}
+
+// ── MỚI (Patch 6): Endurance Test ─────────────
+export const enduranceTestAPI = {
+    submit:  (data) => api.post('/endurance-test', data),
+    getMine: ()     => api.get('/endurance-test')
 }
 
 // ── Sessions ──────────────────────────────────
@@ -70,17 +68,12 @@ export const sessionAPI = {
     getAll:       ()           => api.get('/sessions'),
     getWeek:      ()           => api.get('/sessions/this-week'),
     getById:      (id)         => api.get(`/sessions/${id}`),
-    // ── check-in nhận thêm confirmReducedIntensity, gửi qua query param
-    // (khớp @RequestParam(defaultValue="false") boolean confirmReducedIntensity bên backend).
-    // Lưu ý: tên tham số giữ nguyên "confirmReducedIntensity" để khớp API, nhưng theo
-    // thiết kế mana mới, xác nhận này KHÔNG còn làm giảm rep — chỉ là "vẫn tiếp tục tập". ──
     checkIn:    (id, confirmReducedIntensity = false) =>
         api.post(`/sessions/${id}/check-in`, null, { params: { confirmReducedIntensity } }),
     enroll:       (data)       => api.post('/sessions/enroll', data),
     complete:     (id, data)   => api.post(`/sessions/${id}/check-out`, data),
     skip:         (id, notes)  => api.post(`/sessions/${id}/skip`, { notes }),
     delete:       (id)         => api.delete(`/sessions/${id}`),
-    // Thêm hàm bọc API lấy tiến độ tuần từ WorkoutSessionController
     getWeekProgress: (planId, weekNumber) => api.get(`/sessions/week-progress?planId=${planId}&weekNumber=${weekNumber}`)
 }
 
@@ -129,17 +122,13 @@ export const exerciseAPI = {
 
 // ── Ratings ───────────────────────────────────
 export const ratingAPI = {
-    // formData: rating, comment, serviceType, isPublic, file (tùy chọn)
     add:          (formData)     => api.post('/ratings', formData, { timeout: 120000 }),
-    // formData: như trên + removeAttachment
     update:       (id, formData) => api.put(`/ratings/${id}`, formData, { timeout: 120000 }),
     remove:       (id)           => api.delete(`/ratings/${id}`),
     getPublic:    ()             => api.get('/ratings/public'),
     getMy:        ()             => api.get('/ratings/my'),
     getAverages:  ()             => api.get('/ratings/averages'),
-    // Admin
     getAll:       ()             => api.get('/ratings/admin/all'),
-    // formData: reply, file (tùy chọn), removeAttachment
     adminReply:   (id, formData) => api.post(`/ratings/admin/${id}/reply`, formData, { timeout: 120000 }),
     adminRemove:  (id)           => api.delete(`/ratings/admin/${id}`)
 }
@@ -166,7 +155,6 @@ export const supportAPI = {
 // ── Chat với user (Admin) ─────────────────────
 export const adminSupportAPI = {
     sessions: ()             => api.get('/admin/support/sessions'),
-    // formData: userId, subject, content, file (tùy chọn)
     start:    (formData)     => api.post('/admin/support/start', formData, { timeout: 120000 }),
     accept:   (id)           => api.post(`/admin/support/${id}/accept`),
     reject:   (id)           => api.post(`/admin/support/${id}/reject`),

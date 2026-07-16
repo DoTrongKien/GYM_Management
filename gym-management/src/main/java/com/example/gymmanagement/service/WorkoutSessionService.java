@@ -3,6 +3,7 @@ package com.example.gymmanagement.service;
 import com.example.gymmanagement.dto.request.*;
 import com.example.gymmanagement.dto.response.*;
 import com.example.gymmanagement.entity.*;
+import com.example.gymmanagement.enums.Goal;
 import com.example.gymmanagement.enums.MuscleGroup;
 import com.example.gymmanagement.enums.ProgressSource;
 import com.example.gymmanagement.enums.SessionStatus;
@@ -201,6 +202,7 @@ public class WorkoutSessionService {
     }
 
     // ── Check-out ─────────────────────────────────────────────
+// ── Check-out ─────────────────────────────────────────────
     @Transactional
     public WorkoutSessionResponse checkOut(String email, Long id, CheckOutRequest req) {
         User user = getUser(email);
@@ -209,29 +211,43 @@ public class WorkoutSessionService {
         if (s.getStatus() != SessionStatus.CHECKED_IN)
             throw new RuntimeException("Hãy check-in trước khi check-out!");
         if (req.getExerciseLogs() == null || req.getExerciseLogs().isEmpty())
-            throw new RuntimeException("Vui lòng chọn tỉ lệ hoàn thành cho từng bài tập!");
+            throw new RuntimeException("Vui lòng nhập dữ liệu cho bài tập!");
 
         // Buổi cuối tuần bắt buộc nhập cân nặng
         if (Boolean.TRUE.equals(s.getIsLastSessionOfWeek()) && req.getCheckoutWeight() == null)
             throw new RuntimeException("Đây là buổi cuối tuần! Vui lòng nhập cân nặng hiện tại.");
 
-        // ── Lưu exercise logs theo completionPercent (0/25/50/75/100) ──
+        // ── SỬA (Patch 4): completionPercent giờ do SERVER tự tính từ repsCompleted/
+        // durationCompleted (client gửi) đối chiếu với sets/reps/durationSeconds đã lên
+        // kế hoạch (WorkoutPlanExercise của buổi này), KHÔNG còn nhận completionPercent
+        // trực tiếp từ client. Không bắt buộc phải gửi đủ dữ liệu — thiếu thì
+        // completionPercent = null (không throw lỗi). ──
+        Map<Long, WorkoutPlanExercise> plannedByExerciseId = (s.getPlanDay() != null && s.getPlanDay().getExercises() != null)
+                ? s.getPlanDay().getExercises().stream()
+                .collect(Collectors.toMap(pe -> pe.getExercise().getId(), pe -> pe, (a, b) -> a))
+                : Collections.emptyMap();
+
         List<SessionExerciseLog> logs = req.getExerciseLogs().stream().map(r -> {
             Exercise ex = exerciseRepo.findById(r.getExerciseId())
                     .orElseThrow(() -> new RuntimeException("Exercise not found"));
-            if (r.getCompletionPercent() == null)
-                throw new RuntimeException("Vui lòng chọn tỉ lệ hoàn thành cho bài: " + ex.getName());
+
+            WorkoutPlanExercise pe = plannedByExerciseId.get(r.getExerciseId());
+            Integer cp = computeCompletionPercent(pe, r.getRepsCompleted(), r.getDurationCompleted());
+
             return SessionExerciseLog.builder()
                     .session(s).exercise(ex)
-                    .completionPercent(r.getCompletionPercent())
+                    .repsCompleted(r.getRepsCompleted())
+                    .durationSeconds(r.getDurationCompleted())
+                    .completionPercent(cp)
                     .weightUsedKg(r.getWeightUsedKg())
-                    .isCompleted(r.getCompletionPercent() > 0)
+                    .isCompleted(cp != null && cp > 0)
                     .notes(r.getNotes())
                     .build();
         }).collect(Collectors.toList());
         logRepo.saveAll(logs);
 
         // completionRate tổng của buổi = trung bình cộng completionPercent các bài
+        // (các log có completionPercent=null bị loại khỏi trung bình, giữ nguyên hành vi cũ)
         double avgSessionRate = logs.stream()
                 .filter(l -> l.getCompletionPercent() != null)
                 .mapToInt(SessionExerciseLog::getCompletionPercent)
@@ -300,7 +316,10 @@ public class WorkoutSessionService {
             });
 
             // Gợi ý tăng/giảm tạ (note hiển thị) — áp dụng cho CẢ 2 loại plan
-            applyWeightAdjustmentNote(user, s.getWorkoutPlan(), s.getWeekNumber());
+            // Gợi ý tăng/giảm tạ (note hiển thị) — áp dụng cho CẢ 2 loại plan
+            // ── SỬA (Patch 9): truyền thêm checkoutWeight để nhánh MAINTENANCE so sánh đúng
+            // cân nặng vừa checkout (không đọc lại targetCurrentValue cũ chưa cập nhật) ──
+            applyWeightAdjustmentNote(user, s.getWorkoutPlan(), s.getWeekNumber(), req.getCheckoutWeight());
 
             // ── Điều chỉnh tạ THỰC theo nhóm cơ, dựa trên completionPercent cả tuần ──
             List<SessionExerciseLog> weekLogs = logRepo.findByUserIdAndPlanIdAndWeekNumber(
@@ -348,6 +367,37 @@ public class WorkoutSessionService {
         WorkoutSessionResponse resp = buildResponse(s);
         resp.setInjuryRisk(injuryRisk);
         return resp;
+    }
+
+    // ── MỚI (Patch 4): tính completionPercent từ dữ liệu kế hoạch (WorkoutPlanExercise)
+    // và dữ liệu thực hiện (repsCompleted/durationCompleted).
+    // Quy tắc chọn công thức (đã xác nhận):
+    //   1) pe == null (buổi custom không có kế hoạch, hoặc exercise không khớp) -> null
+    //   2) pe.getReps() != null -> dùng công thức Reps (ưu tiên nếu cả 2 cùng có)
+    //   3) else nếu pe.getDurationSeconds() != null -> dùng công thức Duration
+    //   4) cả hai đều null -> null
+    // plannedTotal <= 0 hoặc input tương ứng null -> null (không fallback về 0)
+    // Kết quả: tính % thô -> clamp [0,200] -> Math.round() -> Integer
+    private Integer computeCompletionPercent(WorkoutPlanExercise pe, Integer repsCompleted, Integer durationCompleted) {
+        if (pe == null) return null;
+
+        double rawPercent;
+        if (pe.getReps() != null) {
+            if (pe.getSets() == null || repsCompleted == null) return null;
+            int plannedTotalReps = pe.getSets() * pe.getReps();
+            if (plannedTotalReps <= 0) return null;
+            rawPercent = (repsCompleted / (double) plannedTotalReps) * 100;
+        } else if (pe.getDurationSeconds() != null) {
+            if (pe.getSets() == null || durationCompleted == null) return null;
+            int plannedTotalDuration = pe.getSets() * pe.getDurationSeconds();
+            if (plannedTotalDuration <= 0) return null;
+            rawPercent = (durationCompleted / (double) plannedTotalDuration) * 100;
+        } else {
+            return null;
+        }
+
+        double clamped = Math.max(0, Math.min(200, rawPercent));
+        return (int) Math.round(clamped);
     }
 
     @Transactional
@@ -564,29 +614,61 @@ public class WorkoutSessionService {
         };
     }
 
-    private void applyWeightAdjustmentNote(User user, WorkoutPlan plan, Integer weekNumber) {
+    // ── SỬA (Patch 9): rẽ nhánh riêng cho Goal.MAINTENANCE — so cân nặng vừa checkout với
+    // targetBaselineValue (±5%), KHÔNG dùng bảng 7 mốc completion% của Patch 5 (bảng đó chỉ
+    // áp dụng cho MUSCLE_GAIN/WEIGHT_LOSS/ENDURANCE). Các Goal khác giữ nguyên logic Patch 5,
+    // không đổi gì. ──
+    private static final double MAINTENANCE_TOLERANCE_PERCENT = 5.0;
+    private static final String MAINTENANCE_WARNING_NOTE =
+            "Cân nặng hiện tại đã lệch quá 5% so với thời điểm bắt đầu giáo án. " +
+                    "Hệ thống khuyến nghị bạn điều chỉnh chế độ ăn uống hoặc luyện tập để quay về trạng thái duy trì.";
+
+    private void applyWeightAdjustmentNote(User user, WorkoutPlan plan, Integer weekNumber, Double checkoutWeight) {
         if (plan == null) return;
+
+        if (plan.getGoal() == Goal.MAINTENANCE) {
+            Double baseline = plan.getTargetBaselineValue();
+            if (baseline == null || baseline == 0 || checkoutWeight == null) return;
+
+            double deviationPercent = Math.abs(checkoutWeight - baseline) / baseline * 100;
+            String note = deviationPercent > MAINTENANCE_TOLERANCE_PERCENT ? MAINTENANCE_WARNING_NOTE : null;
+
+            plan.setWeightAdjustmentNote(note);
+            planRepo.save(plan);
+            return;
+        }
+
+        // ── Giữ nguyên logic Patch 5 cho các Goal khác ──
         Double avgRate = sessionRepo.avgCompletionRateInWeek(user.getId(), plan.getId(), weekNumber);
         if (avgRate == null) return;
 
         String note;
-        if (avgRate >= 90) {
-            note = "💪 Tuần này bạn hoàn thành " + Math.round(avgRate) + "%! Nên tăng tạ khoảng 10% so với tuần trước.";
+        if (avgRate > 150) {
+            note = "💪 Tuần này bạn hoàn thành " + Math.round(avgRate) + "%! Hiệu suất rất cao. Gợi ý tăng tạ khoảng 15%.";
+        } else if (avgRate >= 120) {
+            note = "📈 Tuần này bạn hoàn thành " + Math.round(avgRate) + "%. Hiệu suất tốt. Gợi ý tăng tạ khoảng 10%.";
+        } else if (avgRate >= 90) {
+            note = "📈 Tuần này bạn hoàn thành " + Math.round(avgRate) + "%. Hiệu suất ổn định. Gợi ý tăng tạ khoảng 5%.";
         } else if (avgRate >= 80) {
-            note = "📈 Tuần này bạn hoàn thành " + Math.round(avgRate) + "%. Nên tăng tạ khoảng 5% so với tuần trước.";
-        } else if (avgRate >= 70) {
             note = "✅ Tuần này bạn hoàn thành " + Math.round(avgRate) + "%. Giữ nguyên mức tạ hiện tại.";
         } else if (avgRate >= 60) {
-            note = "📉 Tuần này bạn hoàn thành " + Math.round(avgRate) + "%. Nên giảm tạ khoảng 5% để đảm bảo form đúng.";
+            note = "📉 Tuần này bạn hoàn thành " + Math.round(avgRate) + "%. Có thể giảm khoảng 5% để đảm bảo kỹ thuật.";
+        } else if (avgRate >= 30) {
+            note = "⚠️ Tuần này bạn hoàn thành " + Math.round(avgRate) + "%. Nên giảm khoảng 10%.";
         } else {
-            note = "⚠️ Tuần này bạn hoàn thành " + Math.round(avgRate) + "%. Nên giảm tạ khoảng 10% và tập trung vào kỹ thuật.";
+            note = "⚠️ Tuần này bạn hoàn thành " + Math.round(avgRate) + "%. Nên giảm khoảng 20%.";
         }
 
         plan.setWeightAdjustmentNote(note);
         planRepo.save(plan);
     }
 
-    // ── Điều chỉnh tạ THỰC theo nhóm cơ (tích lũy multiplier) ──
+
+
+    // ── SỬA (Patch 5): đổi bảng hệ số multiplier từ 5 mốc cũ sang 7 mốc mới, boundary
+    // xét từ cao xuống thấp, đồng bộ với applyWeightAdjustmentNote() ở trên. Không đổi
+    // kiến trúc (vẫn nhân dồn vào multiplier, vẫn áp lên baseWeightKg -> currentWeightKg,
+    // không đụng recommendedWeightKg). ──
     private void adjustMuscleGroupWeights(WorkoutPlan plan, List<SessionExerciseLog> weekLogs) {
         Map<MuscleGroup, List<Integer>> byGroup = weekLogs.stream()
                 .filter(l -> l.getCompletionPercent() != null && l.getExercise().getMuscleGroup() != null)
@@ -600,11 +682,13 @@ public class WorkoutSessionService {
             MuscleGroup mg = entry.getKey();
             double avgRate = entry.getValue().stream().mapToInt(i -> i).average().orElse(0);
 
-            double factor = avgRate >= 90 ? 1.10
-                    : avgRate >= 80 ? 1.05
-                      : avgRate >= 70 ? 1.00
-                        : avgRate >= 60 ? 0.95
-                          : 0.90;
+            double factor = avgRate > 150 ? 1.15
+                    : avgRate >= 120 ? 1.10
+                      : avgRate >= 90 ? 1.05
+                        : avgRate >= 80 ? 1.00
+                          : avgRate >= 60 ? 0.95
+                            : avgRate >= 30 ? 0.90
+                              : 0.80;
 
             WorkoutPlanMuscleGroupWeight mgw = mgWeightRepo
                     .findByWorkoutPlanIdAndMuscleGroup(plan.getId(), mg)
